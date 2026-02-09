@@ -67,7 +67,7 @@ export default function About() {
                       borderLeft: '4px solid var(--color-primary)',
                       fontStyle: 'italic'
                     }}>
-                      We are at the seed stage, currently engaging with investors to create our first leverage and scale the platform. Our AI engine is live at <strong>xocoa-sommelier.com</strong>.
+                      We are at the seed stage, currently engaging with investors to create our first leverage and scale the platform. Our AI engine is live at <strong>xocoa.co</strong>.
                     </p>
                   </div>
 
