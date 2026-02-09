@@ -10,10 +10,25 @@ services:
       - "443:443"
     volumes:
       - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d
-      # Certbot/SSL volumes will be added here later
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
     depends_on:
       - xocoa-frontend
+    command: "/bin/sh -c 'while :; do sleep 6h & wait $${!}; nginx -s reload; done & nginx -g \"daemon off;\"'"
     restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # CERTBOT (SSL Auto-Renew)
+  # -----------------------------
+  certbot:
+    image: certbot/certbot
+    container_name: xocoa_certbot
+    volumes:
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
     networks:
       - xocoa-net
 
@@ -21,11 +36,9 @@ services:
   # FRONTEND (Next.js)
   # -----------------------------
   xocoa-frontend:
-    build: 
-      context: ./frontend
-      dockerfile: Dockerfile
+    # PULL FROM REGISTRY (No local build)
+    image: ghcr.io/hrishi-alikatte/xocoa---prototype--frontend:latest
     container_name: xocoa_frontend
-    # NO PORTS EXPOSED to host (only internal network)
     environment:
       - NODE_ENV=production
       - BACKEND_API_URL=http://xocoa-backend:8000
@@ -39,9 +52,9 @@ services:
   # BACKEND (FastAPI)
   # -----------------------------
   xocoa-backend:
-    build: .
+    # PULL FROM REGISTRY (No local build)
+    image: ghcr.io/hrishi-alikatte/xocoa---prototype--backend:latest
     container_name: xocoa_backend
-    # NO PORTS EXPOSED to host
     volumes:
       - ./data:/app/data
       - ./.env:/app/.env
