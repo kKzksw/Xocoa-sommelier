@@ -1,0 +1,229 @@
+/* Sulphur Point Font */
+@font-face {
+  font-family: 'Sulphur Point';
+  src: url('/fonts/SulphurPoint-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sulphur Point';
+  src: url('/fonts/SulphurPoint-Light.ttf') format('truetype');
+  font-weight: 300;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Sulphur Point';
+  src: url('/fonts/SulphurPoint-Bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+:root {
+  /* === NOUVELLE CHARTE GRAPHIQUE SOMMELIER === */
+
+  /* Typographie - Sulphur Point */
+  --font-body: 'Sulphur Point', sans-serif;
+  --font-primary: 'Sulphur Point', sans-serif;
+
+  /* Tailles de texte */
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.5rem;
+
+  /* Espacements */
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+  --spacing-xl: 2rem;
+
+  /* Couleurs principales */
+  --color-primary: #2D8B7F;
+  --color-primary-light: #3FA395;
+  --color-primary-dark: #236B61;
+
+  /* Couleurs secondaires */
+  --color-secondary: #3D2817;
+  --color-secondary-light: #5A3E28;
+
+  /* Backgrounds */
+  --color-bg-main: #F5F5F0;
+  --color-bg-card: #FFFFFF;
+  --color-bg-dark: #3D2817;
+
+  /* Messages */
+  --color-sommelier-bg: #FFFFFF;
+  --color-sommelier-border: #2D8B7F;
+  --color-user-bg: #1A1A1A;
+
+  /* Texte */
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #6B6B6B;
+  --color-text-light: #F5F5F5;
+  --color-text-accent: #2D8B7F;
+
+  /* Boutons */
+  --color-btn-primary-bg: #1A1A1A;
+  --color-btn-primary-text: #FFFFFF;
+  --color-btn-secondary-bg: #2D8B7F;
+  --color-btn-border: #1A1A1A;
+}
+
+html {
+  color-scheme: light;
+}
+
+body {
+  font-family: var(--font-body);
+  font-weight: 400;
+  line-height: 1.6;
+  color: var(--color-text-primary);
+  background: var(--color-bg-main);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-body);
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+
+p {
+  font-family: var(--font-body);
+  font-weight: 400;
+  color: var(--color-text-primary);
+}
+
+/* Messages Sommelier - Blanc avec bordure verte */
+.message-sommelier {
+  background: var(--color-sommelier-bg);
+  border: 2px solid var(--color-sommelier-border);
+  border-radius: 12px;
+  color: var(--color-text-primary);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  max-width: 80%;
+  font-weight: 400;
+  box-shadow: 0 2px 8px rgba(45, 139, 127, 0.1);
+}
+
+/* Messages Utilisateur - Noir */
+.message-user {
+  background: var(--color-user-bg);
+  border-radius: 12px;
+  color: var(--color-text-light);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-md);
+  margin-left: auto;
+  max-width: 80%;
+  font-weight: 400;
+}
+
+/* Container */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--spacing-lg);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-primary);
+  border-radius: 6px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-primary-dark);
+}
+
+/* Boutons */
+.btn-primary {
+  background: var(--color-btn-primary-bg);
+  color: var(--color-btn-primary-text);
+  border: none;
+  border-radius: 24px;
+  padding: 0.75rem 2rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: var(--text-base);
+}
+
+.btn-primary:hover {
+  background: #2A2A2A;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.btn-secondary {
+  background: var(--color-btn-secondary-bg);
+  color: white;
+  border: none;
+  border-radius: 24px;
+  padding: 0.75rem 2rem;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: var(--text-base);
+}
+
+.btn-secondary:hover {
+  background: var(--color-primary-dark);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(45, 139, 127, 0.3);
+}
+
+/* Focus states */
+:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .message-sommelier,
+  .message-user {
+    max-width: 90%;
+  }
+}
+
+/* Accordion Animation */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    max-height: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    max-height: 5000px;
+    transform: translateY(0);
+  }
+}

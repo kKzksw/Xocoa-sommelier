@@ -1,0 +1,1822 @@
+{
+  "maker_countrys": {
+    "Belgium": {
+      "fr": "Belgique",
+      "es": "Bélgica"
+    },
+    "Brazil": {
+      "fr": "Brésil",
+      "es": "Brasil"
+    },
+    "Ecuador": {
+      "fr": "Équateur",
+      "es": "Ecuador"
+    },
+    "France": {
+      "fr": "France",
+      "es": "Francia"
+    },
+    "Germany": {
+      "fr": "Allemagne",
+      "es": "Alemania"
+    },
+    "India": {
+      "fr": "Inde",
+      "es": "India"
+    },
+    "Italy": {
+      "fr": "Italie",
+      "es": "Italia"
+    },
+    "Japan": {
+      "fr": "Japon",
+      "es": "Japón"
+    },
+    "Madagascar": {
+      "fr": "Madagascar",
+      "es": "Madagascar"
+    },
+    "Peru": {
+      "fr": "Pérou",
+      "es": "Perú"
+    },
+    "Spain": {
+      "fr": "Espagne",
+      "es": "España"
+    },
+    "Switzerland": {
+      "fr": "Suisse",
+      "es": "Suiza"
+    },
+    "UK": {
+      "fr": "Royaume-Uni",
+      "es": "Reino Unido"
+    },
+    "USA": {
+      "fr": "États-Unis",
+      "es": "Estados Unidos"
+    },
+    "Unknown": {
+      "fr": "Inconnu",
+      "es": "Desconocido"
+    },
+    "Vietnam": {
+      "fr": "Vietnam",
+      "es": "Vietnam"
+    }
+  },
+  "origin_countrys": {
+    "Australia": {
+      "fr": "Australie",
+      "es": "Australia"
+    },
+    "Brazil": {
+      "fr": "Brésil",
+      "es": "Brasil"
+    },
+    "Colombia": {
+      "fr": "Colombie",
+      "es": "Colombia"
+    },
+    "Costa Rica": {
+      "fr": "Costa Rica",
+      "es": "Costa Rica"
+    },
+    "Dominican Republic": {
+      "fr": "République dominicaine",
+      "es": "República Dominicana"
+    },
+    "Ecuador": {
+      "fr": "Équateur",
+      "es": "Ecuador"
+    },
+    "Ghana": {
+      "fr": "Ghana",
+      "es": "Ghana"
+    },
+    "Guatemala": {
+      "fr": "Guatemala",
+      "es": "Guatemala"
+    },
+    "Hawaii": {
+      "fr": "Hawaï",
+      "es": "Hawái"
+    },
+    "Honduras": {
+      "fr": "Honduras",
+      "es": "Honduras"
+    },
+    "India": {
+      "fr": "Inde",
+      "es": "India"
+    },
+    "Indonesia": {
+      "fr": "Indonésie",
+      "es": "Indonesia"
+    },
+    "Jamaica": {
+      "fr": "Jamaïque",
+      "es": "Jamaica"
+    },
+    "Madagascar": {
+      "fr": "Madagascar",
+      "es": "Madagascar"
+    },
+    "Mexico": {
+      "fr": "Mexique",
+      "es": "México"
+    },
+    "Nicaragua": {
+      "fr": "Nicaragua",
+      "es": "Nicaragua"
+    },
+    "Papua New Guinea": {
+      "fr": "Papouasie-Nouvelle-Guinée",
+      "es": "Papúa Nueva Guinea"
+    },
+    "Peru": {
+      "fr": "Pérou",
+      "es": "Perú"
+    },
+    "Philippines": {
+      "fr": "Philippines",
+      "es": "Filipinas"
+    },
+    "Tanzania": {
+      "fr": "Tanzanie",
+      "es": "Tanzania"
+    },
+    "Trinidad": {
+      "fr": "Trinité",
+      "es": "Trinidad"
+    },
+    "Venezuela": {
+      "fr": "Venezuela",
+      "es": "Venezuela"
+    },
+    "Vietnam": {
+      "fr": "Viêt Nam",
+      "es": "Vietnam"
+    }
+  },
+  "origin_regions": {
+    "Alajuela": {
+      "fr": "Alajuela",
+      "es": "Alajuela"
+    },
+    "Alta Verapaz": {
+      "fr": "Alta Verapaz",
+      "es": "Alta Verapaz"
+    },
+    "Amazonas": {
+      "fr": "Amazonas",
+      "es": "Amazonas"
+    },
+    "Ambanja": {
+      "fr": "Ambanja",
+      "es": "Ambanja"
+    },
+    "Andhra Pradesh": {
+      "fr": "Andhra Pradesh",
+      "es": "Andhra Pradesh"
+    },
+    "Arauca": {
+      "fr": "Arauca",
+      "es": "Arauca"
+    },
+    "Arriba": {
+      "fr": "Arriba",
+      "es": "Arriba"
+    },
+    "Ashanti": {
+      "fr": "Ashanti",
+      "es": "Ashanti"
+    },
+    "Atlántida": {
+      "fr": "Atlántida",
+      "es": "Atlántida"
+    },
+    "Ba Ria": {
+      "fr": "Ba Ria",
+      "es": "Ba Ria"
+    },
+    "Bahia": {
+      "fr": "Bahia",
+      "es": "Bahía"
+    },
+    "Bali": {
+      "fr": "Bali",
+      "es": "Bali"
+    },
+    "Batangas": {
+      "fr": "Batangas",
+      "es": "Batangas"
+    },
+    "Ben Tre": {
+      "fr": "Ben Tre",
+      "es": "Ben Tre"
+    },
+    "Big Island": {
+      "fr": "Big Island",
+      "es": "Big Island"
+    },
+    "Bohol": {
+      "fr": "Bohol",
+      "es": "Bohol"
+    },
+    "Brong-Ahafo": {
+      "fr": "Brong-Ahafo",
+      "es": "Brong-Ahafo"
+    },
+    "Carenero": {
+      "fr": "Carenero",
+      "es": "Carenero"
+    },
+    "Central": {
+      "fr": "Central",
+      "es": "Central"
+    },
+    "Chiapas": {
+      "fr": "Chiapas",
+      "es": "Chiapas"
+    },
+    "Chuao": {
+      "fr": "Chuao",
+      "es": "Chuao"
+    },
+    "Clarendon": {
+      "fr": "Clarendon",
+      "es": "Clarendon"
+    },
+    "Colón": {
+      "fr": "Colón",
+      "es": "Colón"
+    },
+    "Cusco": {
+      "fr": "Cusco",
+      "es": "Cusco"
+    },
+    "Davao": {
+      "fr": "Davao",
+      "es": "Davao"
+    },
+    "Diego Suarez": {
+      "fr": "Diego Suarez",
+      "es": "Diego Suárez"
+    },
+    "Dong Nai": {
+      "fr": "Dong Nai",
+      "es": "Dong Nai"
+    },
+    "Duarte": {
+      "fr": "Duarte",
+      "es": "Duarte"
+    },
+    "East New Britain": {
+      "fr": "East New Britain",
+      "es": "East New Britain"
+    },
+    "Eastern": {
+      "fr": "Eastern",
+      "es": "Eastern"
+    },
+    "El Oro": {
+      "fr": "El Oro",
+      "es": "El Oro"
+    },
+    "El Seibo": {
+      "fr": "El Seibo",
+      "es": "El Seibo"
+    },
+    "Esmeraldas": {
+      "fr": "Esmeraldas",
+      "es": "Esmeraldas"
+    },
+    "Espírito Santo": {
+      "fr": "Espírito Santo",
+      "es": "Espíritu Santo"
+    },
+    "Flores": {
+      "fr": "Flores",
+      "es": "Flores"
+    },
+    "Gracias a Dios": {
+      "fr": "Gracias a Dios",
+      "es": "Gracias a Dios"
+    },
+    "Gran Couva": {
+      "fr": "Gran Couva",
+      "es": "Gran Couva"
+    },
+    "Guanacaste": {
+      "fr": "Guanacaste",
+      "es": "Guanacaste"
+    },
+    "Guayas": {
+      "fr": "Guayas",
+      "es": "Guayas"
+    },
+    "Guerrero": {
+      "fr": "Guerrero",
+      "es": "Guerrero"
+    },
+    "Huila": {
+      "fr": "Huila",
+      "es": "Huila"
+    },
+    "Izabal": {
+      "fr": "Izabal",
+      "es": "Izabal"
+    },
+    "Java": {
+      "fr": "Java",
+      "es": "Java"
+    },
+    "Jinotega": {
+      "fr": "Jinotega",
+      "es": "Jinotega"
+    },
+    "Karnataka": {
+      "fr": "Karnataka",
+      "es": "Karnataka"
+    },
+    "Kauai": {
+      "fr": "Kauai",
+      "es": "Kauai"
+    },
+    "Kerala": {
+      "fr": "Kerala",
+      "es": "Kerala"
+    },
+    "Kilombero": {
+      "fr": "Kilombero",
+      "es": "Kilombero"
+    },
+    "Kyela": {
+      "fr": "Kyela",
+      "es": "Kyela"
+    },
+    "La Altagracia": {
+      "fr": "La Altagracia",
+      "es": "La Altagracia"
+    },
+    "Lam Dong": {
+      "fr": "Lam Dong",
+      "es": "Lam Dong"
+    },
+    "Limón": {
+      "fr": "Limón",
+      "es": "Limón"
+    },
+    "Los Ríos": {
+      "fr": "Los Ríos",
+      "es": "Los Ríos"
+    },
+    "Madang": {
+      "fr": "Madang",
+      "es": "Madang"
+    },
+    "Manabí": {
+      "fr": "Manabí",
+      "es": "Manabí"
+    },
+    "Maroantsetra": {
+      "fr": "Maroantsetra",
+      "es": "Maroantsetra"
+    },
+    "Matagalpa": {
+      "fr": "Matagalpa",
+      "es": "Matagalpa"
+    },
+    "Mato Grosso": {
+      "fr": "Mato Grosso",
+      "es": "Mato Grosso"
+    },
+    "Maui": {
+      "fr": "Maui",
+      "es": "Maui"
+    },
+    "Mbinga": {
+      "fr": "Mbinga",
+      "es": "Mbinga"
+    },
+    "Mindanao": {
+      "fr": "Mindanao",
+      "es": "Mindanao"
+    },
+    "Mission Beach": {
+      "fr": "Mission Beach",
+      "es": "Mission Beach"
+    },
+    "Molokai": {
+      "fr": "Molokai",
+      "es": "Molokai"
+    },
+    "Montserrat": {
+      "fr": "Montserrat",
+      "es": "Montserrat"
+    },
+    "Morobe": {
+      "fr": "Morobe",
+      "es": "Morobe"
+    },
+    "Morogoro": {
+      "fr": "Morogoro",
+      "es": "Morogoro"
+    },
+    "Northern Territory": {
+      "fr": "Northern Territory",
+      "es": "Northern Territory"
+    },
+    "Nosy Be": {
+      "fr": "Nosy Be",
+      "es": "Nosy Be"
+    },
+    "Nueva Segovia": {
+      "fr": "Nueva Segovia",
+      "es": "Nueva Segovia"
+    },
+    "Oahu": {
+      "fr": "Oahu",
+      "es": "Oahu"
+    },
+    "Oaxaca": {
+      "fr": "Oaxaca",
+      "es": "Oaxaca"
+    },
+    "Ocumare": {
+      "fr": "Ocumare",
+      "es": "Ocumare"
+    },
+    "Olancho": {
+      "fr": "Olancho",
+      "es": "Olancho"
+    },
+    "Pará": {
+      "fr": "Pará",
+      "es": "Pará"
+    },
+    "Patanemo": {
+      "fr": "Patanemo",
+      "es": "Patanemo"
+    },
+    "Petén": {
+      "fr": "Petén",
+      "es": "Petén"
+    },
+    "Piura": {
+      "fr": "Piura",
+      "es": "Piura"
+    },
+    "Portland": {
+      "fr": "Portland",
+      "es": "Portland"
+    },
+    "Puntarenas": {
+      "fr": "Puntarenas",
+      "es": "Puntarenas"
+    },
+    "Queensland": {
+      "fr": "Queensland",
+      "es": "Queensland"
+    },
+    "Quezon": {
+      "fr": "Quezon",
+      "es": "Quezon"
+    },
+    "RAAN": {
+      "fr": "RAAN",
+      "es": "RAAN"
+    },
+    "RAAS": {
+      "fr": "RAAS",
+      "es": "RAAS"
+    },
+    "Rio Claro": {
+      "fr": "Rio Claro",
+      "es": "Río Claro"
+    },
+    "Rondônia": {
+      "fr": "Rondônia",
+      "es": "Rondônia"
+    },
+    "Río Caribe": {
+      "fr": "Río Caribe",
+      "es": "Río Caribe"
+    },
+    "Sambirano": {
+      "fr": "Sambirano",
+      "es": "Sambirano"
+    },
+    "San Francisco": {
+      "fr": "San Francisco",
+      "es": "San Francisco"
+    },
+    "San Martín": {
+      "fr": "San Martín",
+      "es": "San Martín"
+    },
+    "Sangre Grande": {
+      "fr": "Sangre Grande",
+      "es": "Sangre Grande"
+    },
+    "Santander": {
+      "fr": "Santander",
+      "es": "Santander"
+    },
+    "Sepik": {
+      "fr": "Sepik",
+      "es": "Sepik"
+    },
+    "Sierra Nevada": {
+      "fr": "Sierra Nevada",
+      "es": "Sierra Nevada"
+    },
+    "St. Mary": {
+      "fr": "St. Mary",
+      "es": "St. Mary"
+    },
+    "St. Thomas": {
+      "fr": "St. Thomas",
+      "es": "St. Thomas"
+    },
+    "Suchitepéquez": {
+      "fr": "Suchitepéquez",
+      "es": "Suchitepéquez"
+    },
+    "Sulawesi": {
+      "fr": "Sulawesi",
+      "es": "Sulawesi"
+    },
+    "Sumatra": {
+      "fr": "Sumatra",
+      "es": "Sumatra"
+    },
+    "Sur del Lago": {
+      "fr": "Sur del Lago",
+      "es": "Sur del Lago"
+    },
+    "Tabasco": {
+      "fr": "Tabasco",
+      "es": "Tabasco"
+    },
+    "Tamil Nadu": {
+      "fr": "Tamil Nadu",
+      "es": "Tamil Nadu"
+    },
+    "Tanga": {
+      "fr": "Tanga",
+      "es": "Tanga"
+    },
+    "Tien Giang": {
+      "fr": "Tien Giang",
+      "es": "Tien Giang"
+    },
+    "Tumaco": {
+      "fr": "Tumaco",
+      "es": "Tumaco"
+    },
+    "Tumbes": {
+      "fr": "Tumbes",
+      "es": "Tumbes"
+    },
+    "Ucayali": {
+      "fr": "Ucayali",
+      "es": "Ucayali"
+    },
+    "Veracruz": {
+      "fr": "Veracruz",
+      "es": "Veracruz"
+    },
+    "Volta": {
+      "fr": "Volta",
+      "es": "Volta"
+    },
+    "Western": {
+      "fr": "Western",
+      "es": "Western"
+    }
+  },
+  "types": {
+    "bar": {
+      "fr": "barre",
+      "es": "barra"
+    },
+    "bonbon": {
+      "fr": "bonbon",
+      "es": "bombón"
+    },
+    "couverture": {
+      "fr": "couverture",
+      "es": "cobertura"
+    },
+    "disc": {
+      "fr": "disque",
+      "es": "disco"
+    },
+    "square": {
+      "fr": "carré",
+      "es": "cuadrado"
+    },
+    "tablet": {
+      "fr": "tablette",
+      "es": "tableta"
+    },
+    "truffle": {
+      "fr": "truffe",
+      "es": "trufa"
+    }
+  },
+  "bean_varietys": {
+    "CCN-51": {
+      "fr": "CCN-51",
+      "es": "CCN-51"
+    },
+    "Criollo": {
+      "fr": "Criollo",
+      "es": "Criollo"
+    },
+    "Forastero": {
+      "fr": "Forastero",
+      "es": "Forastero"
+    },
+    "Nacional": {
+      "fr": "Nacional",
+      "es": "Nacional"
+    },
+    "TSH-565": {
+      "fr": "TSH-565",
+      "es": "TSH-565"
+    },
+    "Trinitario": {
+      "fr": "Trinitario",
+      "es": "Trinitario"
+    }
+  },
+  "processing_fermentation_methods": {
+    "basket": {
+      "fr": "panier",
+      "es": "cesta"
+    },
+    "box": {
+      "fr": "boîte",
+      "es": "caja"
+    },
+    "cascade": {
+      "fr": "cascade",
+      "es": "cascada"
+    },
+    "controlled": {
+      "fr": "contrôlé",
+      "es": "controlado"
+    },
+    "heap": {
+      "fr": "tas",
+      "es": "montón"
+    },
+    "traditional": {
+      "fr": "traditionnel",
+      "es": "tradicional"
+    },
+    "tray": {
+      "fr": "plateau",
+      "es": "bandeja"
+    }
+  },
+  "processing_drying_methods": {
+    "greenhouse": {
+      "fr": "serre",
+      "es": "invernadero"
+    },
+    "hybrid": {
+      "fr": "hybride",
+      "es": "híbrido"
+    },
+    "mechanical": {
+      "fr": "mécanique",
+      "es": "mecánico"
+    },
+    "platform": {
+      "fr": "plateforme",
+      "es": "plataforma"
+    },
+    "solar": {
+      "fr": "solaire",
+      "es": "solar"
+    },
+    "sun": {
+      "fr": "soleil",
+      "es": "sol"
+    }
+  },
+  "texture_mouthfeels": {
+    "buttery": {
+      "fr": "beurré",
+      "es": "mantecoso"
+    },
+    "creamy": {
+      "fr": "crémeux",
+      "es": "cremoso"
+    },
+    "silky": {
+      "fr": "soyeux",
+      "es": "sedoso"
+    },
+    "smooth": {
+      "fr": "lisse",
+      "es": "suave"
+    },
+    "velvety": {
+      "fr": "velouté",
+      "es": "aterciopelado"
+    },
+    "waxy": {
+      "fr": "cireux",
+      "es": "ceroso"
+    }
+  },
+  "finish_lengths": {
+    "long": {
+      "fr": "long",
+      "es": "largo"
+    },
+    "medium": {
+      "fr": "moyen",
+      "es": "medio"
+    },
+    "persistent": {
+      "fr": "persistent",
+      "es": "persistente"
+    },
+    "short": {
+      "fr": "court",
+      "es": "corto"
+    },
+    "very long": {
+      "fr": "très long",
+      "es": "muy largo"
+    }
+  },
+  "finish_characters": {
+    "clean": {
+      "fr": "propre",
+      "es": "limpio"
+    },
+    "complex": {
+      "fr": "complexe",
+      "es": "complejo"
+    },
+    "dry": {
+      "fr": "sec",
+      "es": "seco"
+    },
+    "evolving": {
+      "fr": "évolutif",
+      "es": "evolutivo"
+    },
+    "lingering": {
+      "fr": "persistant",
+      "es": "persistente"
+    },
+    "sweet": {
+      "fr": "doux",
+      "es": "dulce"
+    }
+  },
+  "production_craft_levels": {
+    "artisan": {
+      "fr": "artisan",
+      "es": "artesano"
+    },
+    "boutique": {
+      "fr": "boutique",
+      "es": "boutique"
+    },
+    "craft": {
+      "fr": "fait main",
+      "es": "artesanal"
+    },
+    "industrial": {
+      "fr": "industriel",
+      "es": "industrial"
+    },
+    "premium": {
+      "fr": "haut de gamme",
+      "es": "premium"
+    }
+  },
+  "sustainability_certificationss": {
+    "B-Corp": {
+      "fr": "B-Corp",
+      "es": "B-Corp",
+      "synonyms": {
+        "fr": ["b-corp", "b corp", "bcorp"],
+        "es": ["b-corp", "b corp", "bcorp"]
+      }
+    },
+    "Demeter": {
+      "fr": "Demeter",
+      "es": "Demeter",
+      "synonyms": {
+        "fr": ["demeter", "déméter"],
+        "es": ["demeter"]
+      }
+    },
+    "Direct Trade": {
+      "fr": "Commerce Direct",
+      "es": "Comercio Directo",
+      "synonyms": {
+        "fr": ["commerce direct", "direct trade", "direct"],
+        "es": ["comercio directo", "direct trade", "directo"]
+      }
+    },
+    "Fair Trade": {
+      "fr": "Commerce Équitable",
+      "es": "Comercio Justo",
+      "synonyms": {
+        "fr": ["commerce équitable", "commerce equitable", "équitable", "equitable", "fair trade"],
+        "es": ["comercio justo", "fair trade", "justo"]
+      }
+    },
+    "Organic": {
+      "fr": "Biologique",
+      "es": "Orgánico",
+      "synonyms": {
+        "fr": ["biologique", "bio", "organique", "organic"],
+        "es": ["orgánico", "organico", "bio", "organic"]
+      }
+    },
+    "Rainforest Alliance": {
+      "fr": "Rainforest Alliance",
+      "es": "Rainforest Alliance",
+      "synonyms": {
+        "fr": ["rainforest alliance", "rainforest"],
+        "es": ["rainforest alliance", "rainforest"]
+      }
+    },
+    "UTZ": {
+      "fr": "UTZ",
+      "es": "UTZ",
+      "synonyms": {
+        "fr": ["utz"],
+        "es": ["utz"]
+      }
+    }
+  },
+  "dietarys": {
+    "gluten-free": {
+      "fr": "sans gluten",
+      "es": "sin gluten"
+    },
+    "keto-friendly": {
+      "fr": "compatible avec le régime keto",
+      "es": "amigable con keto"
+    },
+    "organic": {
+      "fr": "bio",
+      "es": "orgánico"
+    },
+    "vegan": {
+      "fr": "végétalien",
+      "es": "vegano"
+    }
+  },
+  "packaging_materials": {
+    "cardboard": {
+      "fr": "carton",
+      "es": "cartón"
+    },
+    "compostable film": {
+      "fr": "film compostable",
+      "es": "film compostable"
+    },
+    "foil": {
+      "fr": "papier aluminium",
+      "es": "papel de aluminio"
+    },
+    "paper": {
+      "fr": "papier",
+      "es": "papel"
+    },
+    "recycled paper": {
+      "fr": "papier recyclé",
+      "es": "papel reciclado"
+    }
+  },
+  "serving_occasions": {
+    "celebration": {
+      "fr": "célébration",
+      "es": "celebración"
+    },
+    "gift": {
+      "fr": "cadeau",
+      "es": "regalo"
+    },
+    "meditation": {
+      "fr": "méditation",
+      "es": "meditación"
+    },
+    "pairing": {
+      "fr": "accord",
+      "es": "maridaje"
+    },
+    "tasting": {
+      "fr": "dégustation",
+      "es": "cata"
+    }
+  },
+  "awardss": {
+    "Academy of Chocolate - Gold": {
+      "fr": "Académie du Chocolat - Or",
+      "es": "Academia del Chocolate - Oro"
+    },
+    "Academy of Chocolate - Silver": {
+      "fr": "Académie du Chocolat - Argent",
+      "es": "Academia del Chocolate - Plata"
+    },
+    "Best Bean-to-Bar": {
+      "fr": "Meilleur Bean-to-Bar",
+      "es": "Mejor Bean-to-Bar"
+    },
+    "Best Dark Chocolate": {
+      "fr": "Meilleur Chocolat Noir",
+      "es": "Mejor Chocolate Negro"
+    },
+    "Best Flavored Bar": {
+      "fr": "Meilleure Barre Aromatisée",
+      "es": "Mejor Barra Saborizada"
+    },
+    "Best Milk Chocolate": {
+      "fr": "Meilleur Chocolat au Lait",
+      "es": "Mejor Chocolate con Leche"
+    },
+    "Best Single Origin": {
+      "fr": "Meilleur Origine Unique",
+      "es": "Mejor Origen Único"
+    },
+    "Cocoa of Excellence Programme": {
+      "fr": "Programme de l'Excellence du Cacao",
+      "es": "Programa de Excelencia del Cacao"
+    },
+    "Consumer Choice Award": {
+      "fr": "Prix du Choix des Consommateurs",
+      "es": "Premio Elección del Consumidor"
+    },
+    "European Bean-to-Bar Competition": {
+      "fr": "Compétition Européenne Bean-to-Bar",
+      "es": "Competencia Europea Bean-to-Bar"
+    },
+    "FCIA Recognition of Excellence": {
+      "fr": "Reconnaissance d'Excellence de la FCIA",
+      "es": "Reconocimiento de Excelencia de la FCIA"
+    },
+    "Good Food Award Finalist": {
+      "fr": "Finaliste du Good Food Award",
+      "es": "Finalista del Good Food Award"
+    },
+    "Good Food Award Winner": {
+      "fr": "Gagnant du Good Food Award",
+      "es": "Ganador del Good Food Award"
+    },
+    "Great Taste Award - 2 Stars": {
+      "fr": "Great Taste Award - 2 Étoiles",
+      "es": "Great Taste Award - 2 Estrellas"
+    },
+    "Great Taste Award - 3 Stars": {
+      "fr": "Great Taste Award - 3 Étoiles",
+      "es": "Great Taste Award - 3 Estrellas"
+    },
+    "International Chocolate Awards - Bronze": {
+      "fr": "International Chocolate Awards - Bronze",
+      "es": "International Chocolate Awards - Bronce"
+    },
+    "International Chocolate Awards - Gold": {
+      "fr": "International Chocolate Awards - Or",
+      "es": "International Chocolate Awards - Oro"
+    },
+    "International Chocolate Awards - Silver": {
+      "fr": "International Chocolate Awards - Argent",
+      "es": "International Chocolate Awards - Plata"
+    },
+    "Northwest Chocolate Festival Award": {
+      "fr": "Prix du Festival du Chocolat du Nord-Ouest",
+      "es": "Premio del Festival de Chocolate del Noroeste"
+    },
+    "Salon du Chocolat Award": {
+      "fr": "Prix du Salon du Chocolat",
+      "es": "Premio del Salon du Chocolat"
+    }
+  },
+  "pairings_wine": {
+    "Cabernet Sauvignon": {
+      "fr": "Cabernet Sauvignon",
+      "es": "Cabernet Sauvignon"
+    },
+    "Champagne": {
+      "fr": "Champagne",
+      "es": "Champán"
+    },
+    "Merlot": {
+      "fr": "Merlot",
+      "es": "Merlot"
+    },
+    "Moscato": {
+      "fr": "Moscato",
+      "es": "Moscato"
+    },
+    "Pinot Noir": {
+      "fr": "Pinot Noir",
+      "es": "Pinot Noir"
+    },
+    "Port": {
+      "fr": "Port",
+      "es": "Oporto"
+    },
+    "Riesling": {
+      "fr": "Riesling",
+      "es": "Riesling"
+    },
+    "Shiraz": {
+      "fr": "Shiraz",
+      "es": "Shiraz"
+    },
+    "Zinfandel": {
+      "fr": "Zinfandel",
+      "es": "Zinfandel"
+    }
+  },
+  "pairings_spirits": {
+    "Armagnac": {
+      "fr": "Armagnac",
+      "es": "Armagnac"
+    },
+    "Bourbon": {
+      "fr": "Bourbon",
+      "es": "Bourbon"
+    },
+    "Cognac": {
+      "fr": "Cognac",
+      "es": "Cognac"
+    },
+    "Rum": {
+      "fr": "Rhum",
+      "es": "Ron"
+    },
+    "Tequila": {
+      "fr": "Tequila",
+      "es": "Tequila"
+    },
+    "Whisky": {
+      "fr": "Whisky",
+      "es": "Whisky"
+    }
+  },
+  "pairings_coffee": {
+    "Blue Mountain": {
+      "fr": "Blue Mountain",
+      "es": "Blue Mountain"
+    },
+    "Colombian": {
+      "fr": "Colombien",
+      "es": "Colombiano"
+    },
+    "Espresso": {
+      "fr": "Espresso",
+      "es": "Espresso"
+    },
+    "Ethiopian": {
+      "fr": "Éthiopien",
+      "es": "Ecuatoriano"
+    },
+    "Kona": {
+      "fr": "Kona",
+      "es": "Kona"
+    }
+  },
+  "pairings_tea": {
+    "Darjeeling": {
+      "fr": "Darjeeling",
+      "es": "Darjeeling"
+    },
+    "Earl Grey": {
+      "fr": "Earl Grey",
+      "es": "Earl Grey"
+    },
+    "Matcha": {
+      "fr": "Matcha",
+      "es": "Matcha"
+    },
+    "Oolong": {
+      "fr": "Oolong",
+      "es": "Oolong"
+    },
+    "Pu-erh": {
+      "fr": "Pu-erh",
+      "es": "Pu-erh"
+    }
+  },
+  "pairings_cheese": {
+    "Aged Cheddar": {
+      "fr": "Cheddar affiné",
+      "es": "Cheddar envejecido"
+    },
+    "Blue Cheese": {
+      "fr": "Fromage bleu",
+      "es": "Queso azul"
+    },
+    "Brie": {
+      "fr": "Brie",
+      "es": "Brie"
+    },
+    "Gouda": {
+      "fr": "Gouda",
+      "es": "Gouda"
+    },
+    "Manchego": {
+      "fr": "Manchego",
+      "es": "Manchego"
+    }
+  },
+  "pairings_fruits": {
+    "Berries": {
+      "fr": "Baies",
+      "es": "Bayas"
+    },
+    "Citrus": {
+      "fr": "Agrumes",
+      "es": "Cítrico"
+    },
+    "Figs": {
+      "fr": "Figues",
+      "es": "Higos"
+    },
+    "Stone Fruits": {
+      "fr": "Fruits à noyau",
+      "es": "Frutas de hueso"
+    },
+    "Tropical Fruits": {
+      "fr": "Fruits tropicaux",
+      "es": "Frutas Tropicales"
+    }
+  },
+  "pairings_nuts": {
+    "Almonds": {
+      "fr": "Amandes",
+      "es": "Almendras"
+    },
+    "Hazelnuts": {
+      "fr": "Noisettes",
+      "es": "Avellanas"
+    },
+    "Pecans": {
+      "fr": "Pécans",
+      "es": "Nueces pecanas"
+    },
+    "Pistachios": {
+      "fr": "Pistaches",
+      "es": "Pistachos"
+    },
+    "Walnuts": {
+      "fr": "Noix",
+      "es": "Nueces"
+    }
+  },
+  "flavors": {
+    "agave": {
+      "fr": "agave",
+      "es": "agave"
+    },
+    "allspice": {
+      "fr": "piment de la Jamaïque",
+      "es": "pimienta de Jamaica"
+    },
+    "almond": {
+      "fr": "amande",
+      "es": "almendra"
+    },
+    "amaretto": {
+      "fr": "amaretto",
+      "es": "amaretto"
+    },
+    "anchovy": {
+      "fr": "anchois",
+      "es": "anchoa"
+    },
+    "apricot": {
+      "fr": "abricot",
+      "es": "albaricoque"
+    },
+    "ash": {
+      "fr": "cendre",
+      "es": "ceniza"
+    },
+    "açai": {
+      "fr": "açaï",
+      "es": "açaí"
+    },
+    "basil": {
+      "fr": "basilic",
+      "es": "albahaca"
+    },
+    "bergamot": {
+      "fr": "bergamote",
+      "es": "bergamota"
+    },
+    "birch": {
+      "fr": "bouleau",
+      "es": "abeto"
+    },
+    "biscuit": {
+      "fr": "biscuit",
+      "es": "galleta"
+    },
+    "black pepper": {
+      "fr": "poivre noir",
+      "es": "pimienta negra"
+    },
+    "black tea": {
+      "fr": "thé noir",
+      "es": "té negro"
+    },
+    "blackberry": {
+      "fr": "mûre",
+      "es": "mora"
+    },
+    "blackcurrant": {
+      "fr": "cassis",
+      "es": "grosella negra"
+    },
+    "blueberry": {
+      "fr": "myrtille",
+      "es": "arándano"
+    },
+    "brandy": {
+      "fr": "brandy",
+      "es": "brandy"
+    },
+    "brazil": {
+      "fr": "Brésil",
+      "es": "Brasil"
+    },
+    "brine": {
+      "fr": "saumure",
+      "es": "salmuera"
+    },
+    "bubble gum": {
+      "fr": "chewing-gum",
+      "es": "chicle"
+    },
+    "burnt": {
+      "fr": "brûlé",
+      "es": "quemado"
+    },
+    "butter": {
+      "fr": "beurre",
+      "es": "mantequilla"
+    },
+    "butterscotch": {
+      "fr": "caramel au beurre",
+      "es": "caramelo de mantequilla"
+    },
+    "campfire": {
+      "fr": "feu de camp",
+      "es": "fogata"
+    },
+    "candy": {
+      "fr": "bonbon",
+      "es": "caramelo"
+    },
+    "caramel": {
+      "fr": "caramel",
+      "es": "caramelo"
+    },
+    "cardamom": {
+      "fr": "cardamome",
+      "es": "cardamomo"
+    },
+    "cashew": {
+      "fr": "anacarde",
+      "es": "anacardo"
+    },
+    "cayenne": {
+      "fr": "cayenne",
+      "es": "cayena"
+    },
+    "cedar": {
+      "fr": "cèdre",
+      "es": "cedro"
+    },
+    "cereal": {
+      "fr": "céréale",
+      "es": "cereal"
+    },
+    "chamomile": {
+      "fr": "camomille",
+      "es": "manzanilla"
+    },
+    "charcoal": {
+      "fr": "charbon",
+      "es": "carbón"
+    },
+    "cheese": {
+      "fr": "fromage",
+      "es": "queso"
+    },
+    "cherry": {
+      "fr": "cerise",
+      "es": "cereza"
+    },
+    "chia": {
+      "fr": "chia",
+      "es": "chia"
+    },
+    "chili": {
+      "fr": "piment",
+      "es": "chile"
+    },
+    "cinnamon": {
+      "fr": "cannelle",
+      "es": "canela"
+    },
+    "clove": {
+      "fr": "clou de girofle",
+      "es": "clavo"
+    },
+    "cocoa": {
+      "fr": "cacao",
+      "es": "cacao"
+    },
+    "coffee": {
+      "fr": "café",
+      "es": "café"
+    },
+    "cognac": {
+      "fr": "cognac",
+      "es": "cognac"
+    },
+    "condensed milk": {
+      "fr": "lait concentré",
+      "es": "leche condensada"
+    },
+    "coriander": {
+      "fr": "coriandre",
+      "es": "cilantro"
+    },
+    "cotton candy": {
+      "fr": "barbe à papa",
+      "es": "algodón de azúcar"
+    },
+    "cranberry": {
+      "fr": "canneberge",
+      "es": "arándano rojo"
+    },
+    "cream": {
+      "fr": "crème",
+      "es": "crema"
+    },
+    "cucumber": {
+      "fr": "concombre",
+      "es": "pepino"
+    },
+    "cumin": {
+      "fr": "cumin",
+      "es": "comino"
+    },
+    "date": {
+      "fr": "datte",
+      "es": "dátil"
+    },
+    "dragon fruit": {
+      "fr": "fruit du dragon",
+      "es": "fruta del dragón"
+    },
+    "dulce de leche": {
+      "fr": "dulce de leche",
+      "es": "dulce de leche"
+    },
+    "earl grey": {
+      "fr": "Earl Grey",
+      "es": "Earl Grey"
+    },
+    "elderberry": {
+      "fr": "sureau",
+      "es": "saúco"
+    },
+    "elderflower": {
+      "fr": "fleur de sureau",
+      "es": "flor de saúco"
+    },
+    "espresso": {
+      "fr": "espresso",
+      "es": "espresso"
+    },
+    "fig": {
+      "fr": "figue",
+      "es": "higo"
+    },
+    "forest floor": {
+      "fr": "sol forestier",
+      "es": "suelo forestal"
+    },
+    "fudge": {
+      "fr": "fudge",
+      "es": "fudge"
+    },
+    "ginger": {
+      "fr": "gingembre",
+      "es": "jengibre"
+    },
+    "grapefruit": {
+      "fr": "pamplemousse",
+      "es": "pomelo"
+    },
+    "grass": {
+      "fr": "herbe",
+      "es": "hierba"
+    },
+    "green": {
+      "fr": "vert",
+      "es": "verde"
+    },
+    "green tea": {
+      "fr": "thé vert",
+      "es": "té verde"
+    },
+    "groundnut": {
+      "fr": "arachide",
+      "es": "cacahuate"
+    },
+    "guava": {
+      "fr": "goyave",
+      "es": "guayaba"
+    },
+    "hay": {
+      "fr": "foin",
+      "es": "heno"
+    },
+    "hazelnut": {
+      "fr": "noisette",
+      "es": "avellana"
+    },
+    "hibiscus": {
+      "fr": "hibiscus",
+      "es": "hibisco"
+    },
+    "honey": {
+      "fr": "miel",
+      "es": "miel"
+    },
+    "iodine": {
+      "fr": "iode",
+      "es": "yodo"
+    },
+    "jasmine": {
+      "fr": "jasmin",
+      "es": "jazmín"
+    },
+    "kimchi": {
+      "fr": "kimchi",
+      "es": "kimchi"
+    },
+    "kirsch": {
+      "fr": "kirsch",
+      "es": "kirsch"
+    },
+    "kombucha": {
+      "fr": "kombucha",
+      "es": "kombucha"
+    },
+    "lavender": {
+      "fr": "lavande",
+      "es": "lavanda"
+    },
+    "leafy": {
+      "fr": "feuillu",
+      "es": "hojoso"
+    },
+    "lemon": {
+      "fr": "citron",
+      "es": "limón"
+    },
+    "lime": {
+      "fr": "citron vert",
+      "es": "limón verde"
+    },
+    "lychee": {
+      "fr": "litchi",
+      "es": "lichi"
+    },
+    "macadamia": {
+      "fr": "macadamia",
+      "es": "macadamia"
+    },
+    "mahogany": {
+      "fr": "acajou",
+      "es": "caoba"
+    },
+    "malt": {
+      "fr": "malt",
+      "es": "malta"
+    },
+    "mango": {
+      "fr": "mangue",
+      "es": "mango"
+    },
+    "maple": {
+      "fr": "érable",
+      "es": "arce"
+    },
+    "marshmallow": {
+      "fr": "guimauve",
+      "es": "malvavisco"
+    },
+    "matcha": {
+      "fr": "matcha",
+      "es": "matcha"
+    },
+    "milk": {
+      "fr": "lait",
+      "es": "leche"
+    },
+    "mineral": {
+      "fr": "minéral",
+      "es": "mineral"
+    },
+    "mint": {
+      "fr": "menthe",
+      "es": "menta"
+    },
+    "miso": {
+      "fr": "miso",
+      "es": "miso"
+    },
+    "molasses": {
+      "fr": "mélasse",
+      "es": "melaza"
+    },
+    "moss": {
+      "fr": "mousse",
+      "es": "musgo"
+    },
+    "mushroom": {
+      "fr": "champignon",
+      "es": "hongo"
+    },
+    "nectarine": {
+      "fr": "nectarine",
+      "es": "nectarina"
+    },
+    "nougat": {
+      "fr": "nougat",
+      "es": "nougat"
+    },
+    "nutmeg": {
+      "fr": "noix de muscade",
+      "es": "nuez moscada"
+    },
+    "oak": {
+      "fr": "chêne",
+      "es": "roble"
+    },
+    "oolong": {
+      "fr": "oolong",
+      "es": "oolong"
+    },
+    "orange": {
+      "fr": "orange",
+      "es": "naranja"
+    },
+    "orange blossom": {
+      "fr": "fleur d'oranger",
+      "es": "flor de azahar"
+    },
+    "oregano": {
+      "fr": "origan",
+      "es": "orégano"
+    },
+    "papaya": {
+      "fr": "papaye",
+      "es": "papaya"
+    },
+    "paprika": {
+      "fr": "paprika",
+      "es": "páprika"
+    },
+    "parmesan": {
+      "fr": "parmesan",
+      "es": "parmesano"
+    },
+    "passion fruit": {
+      "fr": "fruit de la passion",
+      "es": "fruta de la pasión"
+    },
+    "peach": {
+      "fr": "pêche",
+      "es": "durazno"
+    },
+    "peanut": {
+      "fr": "cacahuète",
+      "es": "cacahuate"
+    },
+    "pecan": {
+      "fr": "pacane",
+      "es": "nuez pecana"
+    },
+    "pickle": {
+      "fr": "cornichon",
+      "es": "pepino encurtido"
+    },
+    "pine": {
+      "fr": "pin",
+      "es": "pino"
+    },
+    "pineapple": {
+      "fr": "ananas",
+      "es": "piña"
+    },
+    "pink pepper": {
+      "fr": "poivre rose",
+      "es": "pimienta rosa"
+    },
+    "pipe": {
+      "fr": "pipe",
+      "es": "pipa"
+    },
+    "plum": {
+      "fr": "prune",
+      "es": "ciruela"
+    },
+    "pomegranate": {
+      "fr": "grenade",
+      "es": "granada"
+    },
+    "port": {
+      "fr": "porto",
+      "es": "oporto"
+    },
+    "praline": {
+      "fr": "praliné",
+      "es": "praliné"
+    },
+    "prune": {
+      "fr": "pruneau",
+      "es": "ciruela pasa"
+    },
+    "pumpkin seed": {
+      "fr": "graines de citrouille",
+      "es": "semilla de calabaza"
+    },
+    "raisin": {
+      "fr": "raisin",
+      "es": "uva pasa"
+    },
+    "raspberry": {
+      "fr": "framboise",
+      "es": "frambuesa"
+    },
+    "redcurrant": {
+      "fr": "groseille",
+      "es": "grosella roja"
+    },
+    "rose": {
+      "fr": "rose",
+      "es": "rosa"
+    },
+    "rosemary": {
+      "fr": "romarin",
+      "es": "romero"
+    },
+    "rum": {
+      "fr": "rhum",
+      "es": "ron"
+    },
+    "saffron": {
+      "fr": "safran",
+      "es": "azafrán"
+    },
+    "sage": {
+      "fr": "sauge",
+      "es": "salvia"
+    },
+    "salt": {
+      "fr": "sel",
+      "es": "sal"
+    },
+    "sandalwood": {
+      "fr": "bois de santal",
+      "es": "sándalo"
+    },
+    "sauerkraut": {
+      "fr": "choucroute",
+      "es": "chucrut"
+    },
+    "seaweed": {
+      "fr": "algue",
+      "es": "alga"
+    },
+    "sesame": {
+      "fr": "sésame",
+      "es": "sésamo"
+    },
+    "soil": {
+      "fr": "sol",
+      "es": "suelo"
+    },
+    "soy": {
+      "fr": "soja",
+      "es": "soja"
+    },
+    "star anise": {
+      "fr": "anis étoilé",
+      "es": "anís estrellado"
+    },
+    "straw": {
+      "fr": "paille",
+      "es": "paja"
+    },
+    "strawberry": {
+      "fr": "fraise",
+      "es": "fresa"
+    },
+    "sultana": {
+      "fr": "sultane",
+      "es": "sultana"
+    },
+    "sunflower": {
+      "fr": "tournesol",
+      "es": "girasol"
+    },
+    "tangerine": {
+      "fr": "mandarine",
+      "es": "mandarina"
+    },
+    "thyme": {
+      "fr": "thym",
+      "es": "tomillo"
+    },
+    "toast": {
+      "fr": "toast",
+      "es": "tostada"
+    },
+    "tobacco": {
+      "fr": "tabac",
+      "es": "tabaco"
+    },
+    "toffee": {
+      "fr": "toffee",
+      "es": "toffee"
+    },
+    "treacle": {
+      "fr": "mélasse",
+      "es": "melaza"
+    },
+    "truffle": {
+      "fr": "truffe",
+      "es": "trufa"
+    },
+    "turmeric": {
+      "fr": "curcuma",
+      "es": "cúrcuma"
+    },
+    "vinegar": {
+      "fr": "vinaigre",
+      "es": "vinagre"
+    },
+    "violet": {
+      "fr": "violette",
+      "es": "violeta"
+    },
+    "walnut": {
+      "fr": "noix",
+      "es": "nuez"
+    },
+    "wet earth": {
+      "fr": "terre humide",
+      "es": "tierra húmeda"
+    },
+    "whiskey": {
+      "fr": "whisky",
+      "es": "whisky"
+    },
+    "white pepper": {
+      "fr": "poivre blanc",
+      "es": "pimienta blanca"
+    },
+    "white tea": {
+      "fr": "thé blanc",
+      "es": "té blanco"
+    },
+    "wine": {
+      "fr": "vin",
+      "es": "vino"
+    },
+    "yogurt": {
+      "fr": "yaourt",
+      "es": "yogur"
+    },
+    "yuzu": {
+      "fr": "yuzu",
+      "es": "yuzu"
+    }
+  }
+}

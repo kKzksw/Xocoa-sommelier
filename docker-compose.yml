@@ -1,0 +1,42 @@
+services:
+  xocoa-backend:
+    build: .
+    container_name: xocoa_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 6G
+    networks:
+      - xocoa-net
+
+  xocoa-frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: xocoa_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # In Docker, backend is accessible at this hostname
+      - BACKEND_API_URL=http://xocoa-backend:8000
+    depends_on:
+      - xocoa-backend
+    restart: always
+    networks:
+      - xocoa-net
+
+networks:
+  xocoa-net:
+    driver: bridge

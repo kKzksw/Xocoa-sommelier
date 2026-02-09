@@ -1,0 +1,26 @@
+[build]
+  command = "npm run build"
+  publish = "out"
+  ignore = "/bin/false"
+
+[build.environment]
+  NODE_VERSION = "18"
+  CI = "false"
+
+# API routes as Netlify functions (must be FIRST)
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/:splat"
+  status = 200
+
+# Redirects for SPA (must be LAST)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  directory = "netlify/functions"
+
+[functions."weekly-report"]
+  schedule = "0 9 * * 6"  # Every Saturday at 9:00 AM (GMT)

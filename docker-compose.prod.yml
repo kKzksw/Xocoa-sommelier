@@ -1,0 +1,56 @@
+services:
+  # -----------------------------
+  # ENTRY POINT (NGINX)
+  # -----------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: xocoa_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d
+      # Certbot/SSL volumes will be added here later
+    depends_on:
+      - xocoa-frontend
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # FRONTEND (Next.js)
+  # -----------------------------
+  xocoa-frontend:
+    build: 
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: xocoa_frontend
+    # NO PORTS EXPOSED to host (only internal network)
+    environment:
+      - NODE_ENV=production
+      - BACKEND_API_URL=http://xocoa-backend:8000
+    depends_on:
+      - xocoa-backend
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # BACKEND (FastAPI)
+  # -----------------------------
+  xocoa-backend:
+    build: .
+    container_name: xocoa_backend
+    # NO PORTS EXPOSED to host
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    restart: always
+    networks:
+      - xocoa-net
+
+networks:
+  xocoa-net:
+    driver: bridge

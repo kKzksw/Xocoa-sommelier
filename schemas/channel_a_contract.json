@@ -1,0 +1,11 @@
+{
+  "type": "enum",
+  "format": "enum",
+  "cocoa_percentage": "range",
+  "exclude_allergens": "list",
+  "dietary_exclusions": "list",
+  "price_range": "range",
+  "price_currency": "enum",
+  "limited_edition": "boolean"
+}
+
