@@ -83,4 +83,3 @@ Automated workflows via **GitHub Actions**:
 ```
 
 ---
-*Architected by Gemini CLI.*
