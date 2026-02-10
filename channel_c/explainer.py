@@ -53,21 +53,42 @@ class LLMExplainer:
             # Insert before the last message (which is usually the user's latest query)
             messages.insert(-1, {"role": "system", "content": f"CONTEXT FROM DATABASE:\n{context_data}"})
 
-        try:
-            response = self.client.chat.completions.create(
-                model=self.model,
-                messages=messages,
-                temperature=0.7, # Conversational warmth
-                max_tokens=400
-            )
-            text = response.choices[0].message.content
-            
-            # Legacy Frontend Compatibility: Strip Markdown formatting
-            text = text.replace("**", "").replace("__", "")
-            
-            return text
-        except Exception as e:
-            return f"I'm having trouble thinking right now. ({str(e)})"
+        import time
+        import random
+        
+        max_retries = 3
+        base_delay = 2
+
+        for attempt in range(max_retries):
+            try:
+                response = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=messages,
+                    temperature=0.7, # Conversational warmth
+                    max_tokens=400
+                )
+                text = response.choices[0].message.content
+                
+                # Legacy Frontend Compatibility: Strip Markdown formatting
+                text = text.replace("**", "").replace("__", "")
+                
+                return text
+
+            except Exception as e:
+                error_str = str(e).lower()
+                # Check for rate limit error (429)
+                if "429" in error_str or "rate limit" in error_str:
+                    if attempt < max_retries - 1:
+                        # Exponential backoff with jitter: 2s, 4s, 8s... + random
+                        sleep_time = (base_delay * (2 ** attempt)) + (random.random() * 0.5)
+                        print(f"⚠️ Rate limit hit. Retrying in {sleep_time:.2f}s...")
+                        time.sleep(sleep_time)
+                        continue
+                    else:
+                        return "I'm a bit overwhelmed with requests right now. Could you ask me again in a few seconds?"
+                else:
+                    # Non-retryable error
+                    return f"I'm having trouble thinking right now. ({str(e)})"
 
     def explain(self, query: str, products: List[Dict]) -> str:
         """Legacy explanation method (wraps chat)"""
