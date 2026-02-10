@@ -9,9 +9,23 @@ echo "🛡️  [XOCOA] Starting Security Hardening..."
 apt-get update && apt-get upgrade -y
 
 # 2. Install Essentials
-apt-get install -y ufw fail2ban curl git htop
+apt-get install -y ufw fail2ban curl git htop unattended-upgrades
 
-# 3. Configure Firewall (UFW)
+# 3. Hardening SSH (The Fort)
+echo "🔒 [XOCOA] Hardening SSH..."
+# Disable Root Login
+sed -i 's/^#PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+sed -i 's/^PermitRootLogin.*/PermitRootLogin no/' /etc/ssh/sshd_config
+
+# Disable Password Auth (Keys Only) - DISABLED FOR NOW TO PREVENT LOCKOUT
+# sed -i 's/^#PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+# sed -i 's/^PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+echo "⚠️  [XOCOA] SKIPPING PasswordAuth disable. Please set up SSH Keys first!"
+
+# Restart SSH
+systemctl restart ssh
+
+# 4. Configure Firewall (UFW)
 echo "🔥 [XOCOA] Configuring Firewall..."
 ufw default deny incoming
 ufw default allow outgoing
