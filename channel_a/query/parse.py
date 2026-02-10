@@ -38,13 +38,15 @@ def parse_query_to_filters(query: str) -> dict:
 
     # Explicit Numeric Constraints (e.g., "above 70%", "under 50%", "> 60")
     # Handle "above/over/>"
-    above_match = re.search(r"(?:above|over|more than|higher than|>)[\s]?(\d{1,3})", q)
+    # FIXED: Now requires '%', 'percent', or 'cocoa' to avoid matching prices (e.g. "over 10 euros")
+    above_match = re.search(r"(?:above|over|more than|higher than|>)[\s]?(\d{1,3})\s*(?:%|percent|cocoa)", q)
     if above_match:
         val = float(above_match.group(1))
         filters["cocoa_percentage"] = (val, 100)
         
     # Handle "below/under/<"
-    below_match = re.search(r"(?:below|under|less than|lower than|<)[\s]?(\d{1,3})", q)
+    # FIXED: Now requires '%', 'percent', or 'cocoa' to avoid matching prices (e.g. "under 10 euros")
+    below_match = re.search(r"(?:below|under|less than|lower than|<)[\s]?(\d{1,3})\s*(?:%|percent|cocoa)", q)
     if below_match:
         val = float(below_match.group(1))
         existing_min = filters.get("cocoa_percentage", (0, 100))[0]
@@ -74,7 +76,8 @@ def parse_query_to_filters(query: str) -> dict:
 
     # --- ALLERGENS & INCLUSIONS ---
     # Robust Nut Exclusion
-    if re.search(r"\b(nut\s?free|no\s+nuts?|without\s+(?:any\s+)?nuts?)\b", q):
+    # Added "allergic to" support
+    if re.search(r"\b(nut\s?free|no\s+nuts?|without\s+(?:any\s+)?nuts?|allergic\s+to\s+nuts?|allergy\s+to\s+nuts?)\b", q):
         nut_types = ["nuts", "hazelnuts", "almonds", "pecans", "walnuts", "cashews", "pistachios", "macadamia", "peanut", "groundnut"]
         filters.setdefault("exclude_allergens", []).extend(nut_types)
 

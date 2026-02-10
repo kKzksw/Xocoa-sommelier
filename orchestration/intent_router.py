@@ -18,17 +18,21 @@ class SemanticIntentRouter:
             "search": [
                 "Find chocolate", "I want dark", "Recommend", "Show me", "No nuts", "Suggest me more",
                 "Milk chocolate", "White chocolate", "Dark chocolate",
+                "Mikl", "Choclate", "Choc",
                 "Fruity", "Nutty", "Sweet", "Bitter", "Creamy",
                 "Belgium", "Switzerland", "France", "USA",
                 "Cheap", "Expensive", "High cocoa", "Low cocoa",
                 "Something else", "Different options", "I want",
                 "100%", "85%", "70%", "Darker", "Lighter",
-                "Wine", "Pairing", "Gift", "Present", "Price", "Cost"
+                "Wine", "Pairing", "Gift", "Present", "Price", "Cost",
+                "Vegan", "Options", "Surprise me", "Any options",
+                "Beans", "Bar", "Organic", "Fair trade", "Snack", "Comfort", "Mood", "Feeling"
             ],
             "reference": [
                 "Tell me about the first one", "Describe number 1", 
                 "The first one", "The second one", "This chocolate", "Describe this bar",
-                "Tell me more about it", "Details on the first one", "the third one"
+                "Tell me more about it", "Details on the first one", "the third one",
+                "How much is it", "Is it vegan", "What are the ingredients"
             ],
             "affirm": ["Yes", "Sure", "Okay", "Please do", "Go ahead"]
         }
@@ -43,6 +47,14 @@ class SemanticIntentRouter:
         # ELITE OPERATOR HARD-CODE: Never let simple greetings trigger search
         if t in ["hello", "hi", "hey", "who are you", "what is this", "good morning", "morning"]:
             return "chat"
+
+        # Questions about PROCESS are Chat
+        if "how do you make" in t or "how is chocolate made" in t:
+            return "chat"
+        
+        # KEYWORD OVERRIDE for High-Confidence Search Terms
+        if any(w in t for w in ["find ", "looking for", "recommend", "options", "surprise me", "suggest", "do you have any"]):
+            return "search"
             
         # Hard Rule for digits
         if t.isdigit() or (t.startswith("#") and t[1:].isdigit()):
