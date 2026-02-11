@@ -22,10 +22,9 @@ class SemanticIntentRouter:
                 "Fruity", "Nutty", "Sweet", "Bitter", "Creamy",
                 "Belgium", "Switzerland", "France", "USA",
                 "Cheap", "Expensive", "High cocoa", "Low cocoa",
-                "Something else", "Different options", "I want",
                 "100%", "85%", "70%", "Darker", "Lighter",
                 "Wine", "Pairing", "Gift", "Present", "Price", "Cost",
-                "Vegan", "Options", "Surprise me", "Any options",
+                "Vegan",
                 "Beans", "Bar", "Organic", "Fair trade", "Snack", "Comfort", "Mood", "Feeling"
             ],
             "reference": [
