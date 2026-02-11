@@ -80,6 +80,36 @@ def filter_ids(index, filters):
                     continue
             candidate_ids = filtered
 
+        # --- FLAVOR KEYWORDS (Hard Filter) ---
+        if "flavor_keywords" in filters:
+            keywords = filters["flavor_keywords"]
+            filtered = set()
+            for cid in candidate_ids:
+                blob = index.flavor_text.get(cid, "")
+                # Product must contain AT LEAST ONE of the keywords? 
+                # Or ALL? Let's go with ANY for now to be safe, or ALL if user asked "fruity AND nutty"?
+                # Usually user queries are "fruity nutty chocolate" -> implication is intersection.
+                # Let's enforce ALL keywords found in the parser.
+                if all(k in blob for k in keywords):
+                    filtered.add(cid)
+            candidate_ids = filtered
+
+        # --- PRICE MAX (Simpler Interface) ---
+        if "price_max" in filters:
+            max_p = filters["price_max"]
+            filtered = set()
+            for cid in candidate_ids:
+                val = index.prices.get(cid)
+                try:
+                    if val is not None:
+                        val_clean = re.sub(r'[^\d.]', '', str(val))
+                        if val_clean and float(val_clean) <= max_p:
+                            filtered.add(cid)
+                except (ValueError, TypeError):
+                    continue
+            candidate_ids = filtered
+
+
         return sorted(candidate_ids)
     except Exception as e:
         print(f"Filter Error: {e}")

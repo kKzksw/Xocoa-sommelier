@@ -14,116 +14,110 @@ def parse_query_to_filters(query: str) -> dict:
     q = query.lower()
     filters = {}
 
-    # --- TYPE ---
+    # --- 1. FLAVOR EXTRACTION (New) ---
+    flavor_map = {
+        "fruity": ["fruit", "berry", "citrus", "orange", "lemon", "lime", "raspberry", "strawberry", "cherry", "acidic"],
+        "nutty": ["nut", "hazelnut", "almond", "pecan", "walnut", "cashew", "pistachio", "praline"],
+        "spicy": ["spic", "chili", "pepper", "cinnamon", "cardamom", "ginger"],
+        "floral": ["floral", "flower", "jasmine", "rose", "lavender", "vanilla"],
+        "earthy": ["earth", "soil", "wood", "smoke", "tobacco", "leather"],
+        "sweet": ["sweet", "caramel", "honey", "sugar", "candy", "toffee"],
+        "creamy": ["creamy", "smooth", "butter", "milk"],
+        "bitter": ["bitter", "intense", "strong", "dark"]
+    }
+    
+    found_flavors = []
+    for category, keywords in flavor_map.items():
+        if any(k in q for k in keywords):
+            # If user asks for "fruity", we add "fruit" to keywords to match index
+            # But wait, index matches substrings. So adding the category key might be enough if it appears in text.
+            # Let's add the specific keyword matched? No, let's add the Category keywords.
+            # Actually, let's just add the Category name if it's broad, or specific text?
+            # Better: if "fruity" is found, add ["fruit", "berry"...] to valid keywords?
+            # No, filter logic checks `all(k in blob)`.
+            # If I add "fruity", and blob has "fruit", it fails.
+            # So I should map "fruity" -> "fruit".
+            if category == "fruity": found_flavors.append("fruit")
+            elif category == "nutty": found_flavors.append("nut")
+            elif category == "spicy": found_flavors.append("spic") # Matches spicy, spice
+            elif category == "floral": found_flavors.append("flor")
+            elif category == "earthy": found_flavors.append("earth")
+            elif category == "creamy": found_flavors.append("cream")
+            # "Sweet" and "Bitter" are usually traits, not just flavor notes.
+            # But let's add them.
+            elif category == "sweet": found_flavors.append("sweet")
+            # Bitter is tricky, might mean high cocoa.
+            
+    if found_flavors:
+        filters["flavor_keywords"] = found_flavors
 
-    # Catch common typos using regex patterns
+    # --- 2. PRICE EXTRACTION (Robust) ---
+    # Currency symbols: $, €, £, "euros", "dollars"
+    # Patterns: "under 10", "< 10", "10 euros", "$10"
+    
+    # "Cheap" / "Affordable"
+    if "cheap" in q or "affordable" in q or "budget" in q:
+        filters["price_max"] = 8.0 # Strict budget
+
+    # "Expensive" / "Luxury"
+    if "expensive" in q or "luxury" in q or "premium" in q:
+        filters["price_range"] = (15.0, 1000.0)
+
+    # Explicit Max Price
+    # Matches: "under 5", "< 5", "max 5", "5 euros", "5$"
+    # Regex look for number near "under" or "<"
+    under_match = re.search(r"(?:under|below|less than|<|max)\s?\$?(\d+)", q)
+    if under_match:
+        filters["price_max"] = float(under_match.group(1))
+    
+    # Matches: "5$ or less" (Not common but possible)
+    
+    # --- 3. TYPE ---
     if re.search(r"\b(drak|drark|dark|darker)\b", q):
         filters["cocoa_percentage"] = (70, 100)
         filters["exclude_types"] = ["milk", "white"]
-        
     elif re.search(r"\b(mlik|mikl|milk|milky)\b", q):
-        filters["cocoa_percentage"] = (30, 55)
+        filters["cocoa_percentage"] = (30, 60) # Relaxed upper bound for dark milk
         filters["exclude_types"] = ["dark", "white"]
-
     elif re.search(r"\b(wite|whiite|white)\b", q):
-        filters["cocoa_percentage"] = (0, 20)
+        filters["cocoa_percentage"] = (0, 40)
         filters["exclude_types"] = ["dark", "milk"]
 
-    # Qualitative Cocoa Ranges
-    if "low cocoa" in q or "lower cocoa" in q or "mild" in q:
-        filters["cocoa_percentage"] = (0, 55)
-    
-    if "high cocoa" in q or "higher cocoa" in q or "strong" in q or "intense" in q or "bitter" in q:
-        filters["cocoa_percentage"] = (80, 100)
-
-    # Explicit Numeric Constraints (e.g., "above 70%", "under 50%", "> 60")
-    # Handle "above/over/>"
-    # FIXED: Now requires '%', 'percent', or 'cocoa' to avoid matching prices (e.g. "over 10 euros")
-    above_match = re.search(r"(?:above|over|more than|higher than|>)[\s]?(\d{1,3})\s*(?:%|percent|cocoa)", q)
-    if above_match:
-        val = float(above_match.group(1))
-        filters["cocoa_percentage"] = (val, 100)
-        
-    # Handle "below/under/<"
-    # FIXED: Now requires '%', 'percent', or 'cocoa' to avoid matching prices (e.g. "under 10 euros")
-    below_match = re.search(r"(?:below|under|less than|lower than|<)[\s]?(\d{1,3})\s*(?:%|percent|cocoa)", q)
-    if below_match:
-        val = float(below_match.group(1))
-        existing_min = filters.get("cocoa_percentage", (0, 100))[0]
-        filters["cocoa_percentage"] = (existing_min, val)
-
-    # EXACT Percentage (e.g. "100%", "85%")
-    # Matches "100%" or "85 %"
+    # --- 4. COCOA % ---
+    # "100%", "85 %"
     exact_match = re.search(r"\b(\d{1,3})\s?%", q)
     if exact_match:
         val = float(exact_match.group(1))
-        # Override any previous broad range with a tight specific range
-        # We use a small epsilon (val-1, val+1) to handle potential rounding differences in data
-        filters["cocoa_percentage"] = (val - 1, val + 1)
+        filters["cocoa_percentage"] = (val - 2, val + 2) # Range +/- 2%
 
-
-    # --- PRICE ---
-    price_match = re.search(r"under\s+(\d+)", q)
-    if price_match:
-        filters["price_range"] = (0, float(price_match.group(1)))
-
-    # --- DIETARY ---
+    # --- 5. DIETARY & ALLERGENS ---
     if "vegan" in q:
         filters.setdefault("dietary_exclusions", []).append("non-vegan")
+        filters.setdefault("exclude_allergens", []).append("milk") # Vegan implies no milk
 
     if "gluten free" in q or "gluten-free" in q:
         filters.setdefault("dietary_exclusions", []).append("gluten")
 
-    # --- ALLERGENS & INCLUSIONS ---
     # Robust Nut Exclusion
-    # Added "allergic to" support
-    if re.search(r"\b(nut\s?free|no\s+nuts?|without\s+(?:any\s+)?nuts?|allergic\s+to\s+nuts?|allergy\s+to\s+nuts?)\b", q):
-        nut_types = ["nuts", "hazelnuts", "almonds", "pecans", "walnuts", "cashews", "pistachios", "macadamia", "peanut", "groundnut"]
+    if re.search(r"\b(nut\s?free|no\s+nuts?|without\s+nuts?)\b", q):
+        nut_types = ["nuts", "hazelnuts", "almonds", "pecans", "walnuts", "cashews", "pistachios", "macadamia", "peanut"]
         filters.setdefault("exclude_allergens", []).extend(nut_types)
 
-    # Fruit Exclusion
-    if re.search(r"\b(fruit\s?free|no\s+fruits?|without\s+(?:any\s+)?fruits?|no\s+berries)\b", q):
-        fruit_types = ["fruit", "berries", "cranberry", "blueberry", "strawberry", "raspberry", "cherry", "orange", "lemon", "lime", "citrus"]
-        filters.setdefault("exclude_allergens", []).extend(fruit_types)
-
-    # Plain Logic (Exclude all common inclusions)
-    if "plain" in q or "naked" in q or "pure" in q:
-        # 'Plain' implies no nuts, no fruit
-        nut_types = ["nuts", "hazelnuts", "almonds", "pecans", "walnuts", "cashews", "pistachios", "macadamia", "peanut", "groundnut"]
-        fruit_types = ["fruit", "berries", "cranberry", "blueberry", "strawberry", "raspberry", "cherry", "orange", "lemon", "lime", "citrus"]
-        filters.setdefault("exclude_allergens", []).extend(nut_types + fruit_types)
-
-    if "dairy free" in q or "no dairy" in q or "without milk" in q or "vegan" in q:
+    if "dairy free" in q or "no dairy" in q or "without milk" in q:
          filters.setdefault("exclude_allergens", []).append("milk")
 
-    # --- COUNTRY ---
+    # --- 6. COUNTRY ---
     country = normalize_country_from_query(query)
     if country:
-        # Known Non-Producers (Consumer Countries) -> Must be Maker
-        # (Cacao does not grow in these climates)
         non_producers = [
             "Switzerland", "Belgium", "France", "Germany", "Italy", "UK", 
-            "Canada", "Japan", "USA", "Netherlands", "Austria", "Spain",
-            "Poland", "Denmark", "Sweden", "Norway", "Ireland", "Iceland"
+            "Canada", "Japan", "USA", "Netherlands", "Austria", "Spain"
         ]
-        
-        # Origin Trigger Keywords (Expanded & Robust)
-        origin_triggers = [
-            "bean", "cocoa", "cacao", "origin", "sourced", "harvest", 
-            "grown", "plantation", "estate", "farm", "single origin"
-        ]
-        
-        is_origin_request = any(t in q for t in origin_triggers)
-        
+        # Heuristic: If known non-producer, assume Maker. Else assume Origin.
         if country in non_producers:
-            # You can't have Swiss-grown beans.
             filters["maker_country"] = country
-        elif is_origin_request:
-            # "Beans from Ecuador"
-            filters["origin_country"] = country
         else:
-            # "Ecuador chocolate" -> Default to Maker (e.g. Pacari is Ecuadorian Maker)
-            # This is ambiguous, but Maker is usually the primary mental model.
-            filters["maker_country"] = country
+            # "Vietnam chocolate" -> Origin
+            filters["origin_country"] = country
 
     return filters

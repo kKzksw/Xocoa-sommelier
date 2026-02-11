@@ -155,8 +155,22 @@ async def chat_endpoint(request: ChatRequest):
         recommender = services["recommender"]
         chocolates = services["chocolates"]
         
+        # --- LANGUAGE DETECTION (Dynamic) ---
+        user_lang = "English"
+        q_low = user_input.lower()
+        if any(w in q_low for w in ["bonjour", "salut", "merci", "cherche", "lait", "noir", "je", "vous", "est-ce"]):
+            user_lang = "French"
+        elif any(w in q_low for w in ["hola", "gracias", "quiero", "leche", "negro", "usted"]):
+            user_lang = "Spanish"
+        elif any(w in q_low for w in ["hallo", "danke", "ich", "schokolade", "bitte"]):
+            user_lang = "German"
+        elif any(w in q_low for w in ["namaste", "dhanyavad", "chahiye", "hindi", "indian"]):
+            user_lang = "English (with Indian context)" # Respond in English but acknowledge culture
+        
+        lang_instruction = f"SYSTEM: The user is currently speaking {user_lang}. You MUST respond in {user_lang}."
+
         intent = router.detect_intent(user_input)
-        logger.info(f"Input: '{user_input}' | Detected Intent: {intent}")
+        logger.info(f"Input: '{user_input}' | Language: {user_lang} | Intent: {intent}")
         
         response_text = ""
         products = []
@@ -164,7 +178,8 @@ async def chat_endpoint(request: ChatRequest):
         # 2. Execute Logic
         if intent == "chat":
             # Pure conversation - NO product context passed initially
-            response_text = explainer.chat(history_dicts)
+            # Inject language instruction
+            response_text = explainer.chat(history_dicts, context_data=lang_instruction)
             
             # SELF-CORRECTION: Did the LLM realize it needs to search?
             if "[SEARCH:" in response_text:
@@ -178,10 +193,10 @@ async def chat_endpoint(request: ChatRequest):
                     products = [p for p in chocolates if p["id"] in ranked_ids]
                     
                     if not products:
-                        response_text = explainer.chat(history_dicts, context_data=f"SYSTEM: Search for '{search_query}' returned zero results.")
+                        response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{search_query}' returned zero results.")
                     else:
                         list_items = [f"{i}. **{p.get('name')}** ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
-                        context_str = "DATABASE RESULTS:\n" + "\n".join(list_items)
+                        context_str = f"{lang_instruction}\nDATABASE RESULTS:\n" + "\n".join(list_items)
                         explanation = explainer.chat(history_dicts, context_data=context_str)
                         response_text = f"I found **{len(products)}** chocolates for you:\n\n" + "\n".join(list_items) + "\n\n" + explanation
                     intent = "search_fallback"
@@ -200,7 +215,7 @@ async def chat_endpoint(request: ChatRequest):
             products = [p for p in chocolates if p["id"] in ranked_ids]
             
             if not products:
-                response_text = explainer.chat(history_dicts, context_data=f"SYSTEM: Search for '{current_q}' returned zero results.")
+                response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{current_q}' returned zero results.")
             else:
                 # Build rich, structured context for the LLM
                 list_items = []
@@ -216,17 +231,9 @@ async def chat_endpoint(request: ChatRequest):
                     item_str += f"  WEBSITE: {p.get('maker_website', 'N/A')}\n"
                     list_items.append(item_str)
                 
-                # Language Detection (Improved)
-                user_lang = "English"
-                q_low = user_input.lower()
-                if any(w in q_low for w in ["bonjour", "salut", "merci", "cherche", "lait", "noir"]):
-                    user_lang = "French"
-                elif any(w in q_low for w in ["namaste", "dhanyavad", "chahiye", "hindi", "indian"]):
-                    user_lang = "Hindi/Indian context"
-                
                 is_vague = len(user_input.split()) < 4 and not any(k in q_low for k in ["under", "above", "percent", "%"])
                 
-                system_note = f"SYSTEM: Use the user's language ({user_lang}). ONLY recommend from the list below.\n"
+                system_note = f"{lang_instruction}\nSYSTEM: ONLY recommend from the list below.\n"
                 if is_vague:
                     system_note += "SYSTEM: User request is vague. Recommend ONLY 2 items and ask a discovery question.\n"
                 
@@ -247,19 +254,19 @@ async def chat_endpoint(request: ChatRequest):
                 ranked_ids = result.get("ranked", [])
                 products = [p for p in chocolates if p["id"] in ranked_ids]
                 if not products:
-                    response_text = explainer.chat(history_dicts, context_data=f"SYSTEM: Search for '{user_input}' returned zero results.")
+                    response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{user_input}' returned zero results.")
                 else:
                     list_items = [f"{i}. **{p.get('name')}** ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
-                    context_str = "DATABASE RESULTS:\n" + "\n".join(list_items)
+                    context_str = f"{lang_instruction}\nDATABASE RESULTS:\n" + "\n".join(list_items)
                     explanation = explainer.chat(history_dicts, context_data=context_str)
                     response_text = f"I found **{len(products)}** chocolates for you:\n\n" + explanation
             else:
                 fact_text, idx = resolve_reference(user_input, request.last_ranked_products)
-                response_text = explainer.chat(history_dicts, context_data=f"FACTUAL ANSWER: {fact_text}")
+                response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nFACTUAL ANSWER: {fact_text}")
                 products = request.last_ranked_products
 
         else:
-            response_text = explainer.chat(history_dicts)
+            response_text = explainer.chat(history_dicts, context_data=lang_instruction)
 
         # FINAL SANITIZATION: Strip internal tokens
         import re

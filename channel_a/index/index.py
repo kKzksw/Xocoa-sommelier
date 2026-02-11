@@ -17,6 +17,7 @@ class ChannelAIndex:
         self.limited = {}
         self.maker_countries = {} # {Country: {id1, id2...}}
         self.origin_countries = {} # {Country: {id1, id2...}}
+        self.flavor_text = {} # {id: "full flavor text blob"}
 
         self._build()
 
@@ -29,6 +30,16 @@ class ChannelAIndex:
             # Skip items that look like books or noise
             if len(name) > 100 or " by " in name.lower() or "author" in name.lower():
                 continue
+            
+            # --- Flavor Indexing ---
+            # Create a searchable text blob for keywords
+            blob = (
+                str(item.get("flavor_notes_primary", "")) + " " +
+                str(item.get("flavor_notes_secondary", "")) + " " +
+                str(item.get("tasting_notes", "")) + " " +
+                str(item.get("name", ""))
+            ).lower()
+            self.flavor_text[cid] = blob
 
             # --- Country Indexing ---
             mc = normalize_country_for_index(item.get("maker_country"))
