@@ -114,13 +114,13 @@ export default function ChatInterface() {
           </div>
         )}
 
+        <div ref={messagesEndRef} />
+
         {recommendations.length > 0 && (
           <div className="border-t border-warm-gray p-6 mt-4">
             <ChocolateRecommendations recommendations={recommendations} />
           </div>
         )}
-
-        <div ref={messagesEndRef} />
       </div>
 
       <FixedChatInput onSendMessage={handleSendMessage} disabled={isLoading} />

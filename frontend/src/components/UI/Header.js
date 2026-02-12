@@ -63,7 +63,7 @@ export default function Header() {
             src="/LOGO_SOMMELIER_FOND_BLANC_COULEURS.png"
             alt="Le Sommelier du Chocolat"
             style={{
-              height: '180px', // Slightly smaller for better balance
+              height: '240px', // Increased size for better visibility
               width: 'auto',
               display: 'block',
               margin: '0',
