@@ -5,6 +5,10 @@ import time
 API_URL = "http://localhost:8000/api/chat"
 
 test_cases = [
+    # --- NEW FIX VERIFICATION ---
+    {"msg": "I need a chocolate", "intent": "chat"}, # Should trigger discovery, not search
+    {"msg": "Find me candied ginger", "intent": "search"}, # Should filter low scores
+
     # --- BASICS ---
     {"msg": "Hello", "intent": "chat"},
     {"msg": "Who are you?", "intent": "chat"},

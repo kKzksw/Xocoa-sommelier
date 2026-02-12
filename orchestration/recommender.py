@@ -23,7 +23,8 @@ class RecommenderService:
         ranked_ids = self.channel_b.rank(
             candidate_ids=candidate_ids,
             semantic_query=semantic_query,
-            top_k=top_k
+            top_k=top_k,
+            min_score=0.35
         )
         
         return {

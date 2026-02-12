@@ -50,6 +50,19 @@ class SemanticIntentRouter:
         # Questions about PROCESS are Chat
         if "how do you make" in t or "how is chocolate made" in t:
             return "chat"
+
+        # VAGUE REQUESTS -> Chat (Let the LLM ask clarifying questions)
+        # We want to catch "I want chocolate" but NOT "I want dark chocolate"
+        vague_triggers = [
+            "i want chocolate", "i need chocolate", "i want a chocolate", "i need a chocolate",
+            "give me chocolate", "get me chocolate", "chocolate", "chocolates",
+            "i would like chocolate", "i'd like chocolate"
+        ]
+        # Check if the input is exactly one of these (allowing for some punctuation/spaces)
+        import re
+        clean_t = re.sub(r'[^\w\s]', '', t) # Remove punctuation
+        if clean_t in vague_triggers:
+            return "chat"
         
         # KEYWORD OVERRIDE for High-Confidence Search Terms
         if any(w in t for w in ["find ", "looking for", "recommend", "options", "surprise me", "suggest", "do you have any"]):

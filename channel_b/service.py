@@ -37,7 +37,7 @@ class ChannelBService:
         except Exception:
             self.id_to_maker_country = {}
 
-    def rank(self, candidate_ids: list[int], semantic_query: str, top_k: int) -> list[int]:
+    def rank(self, candidate_ids: list[int], semantic_query: str, top_k: int, min_score: float = 0.35) -> list[int]:
         if not candidate_ids:
             return []
 
@@ -65,4 +65,8 @@ class ChannelBService:
             scored.append((pid, score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        return [pid for pid, _ in scored[:top_k]]
+        
+        # Filter by threshold
+        final_results = [pid for pid, score in scored if score >= min_score]
+        
+        return final_results[:top_k]

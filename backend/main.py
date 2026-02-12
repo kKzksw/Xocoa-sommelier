@@ -216,6 +216,8 @@ async def chat_endpoint(request: ChatRequest):
             
             if not products:
                 response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{current_q}' returned zero results.")
+                if not response_text.strip():
+                    response_text = "I am sorry, but I could not find any chocolates that match your search criteria. Would you like to try a different search?"
             else:
                 # Build rich, structured context for the LLM
                 list_items = []
@@ -271,6 +273,9 @@ async def chat_endpoint(request: ChatRequest):
         # FINAL SANITIZATION: Strip internal tokens
         import re
         response_text = re.sub(r"\[SEARCH:.*?\]", "", response_text).strip()
+
+        if not response_text:
+            response_text = "I am having trouble finding the right words (or chocolates) at the moment. Could you rephrase that?"
 
         return ChatResponse(
             response_text=response_text,
