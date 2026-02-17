@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # Import Core Services
 # Note: We run this as a module (python -m backend.main), so imports work from root
@@ -105,6 +106,9 @@ async def lifespan(app: FastAPI):
 # App Definition
 # -----------------------------------------------------------------------------
 app = FastAPI(title="XOCOA API", version="1.0.0", lifespan=lifespan)
+
+# Add Prometheus Instrumentation
+Instrumentator().instrument(app).expose(app)
 
 # Allow CORS for Netlify/Localhost
 app.add_middleware(

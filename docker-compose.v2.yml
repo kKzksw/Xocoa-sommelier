@@ -1,0 +1,160 @@
+services:
+  # -----------------------------
+  # ENTRY POINT (NGINX)
+  # -----------------------------
+  nginx:
+    image: nginx:alpine
+    container_name: xocoa_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infrastructure/nginx/conf.d:/etc/nginx/conf.d
+      - ./certbot/conf:/etc/letsencrypt
+      - ./certbot/www:/var/www/certbot
+    depends_on:
+      - xocoa-frontend
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # FRONTEND (Next.js)
+  # -----------------------------
+  xocoa-frontend:
+    image: ghcr.io/hrishi-alikatte/xocoa---prototype--frontend:latest
+    container_name: xocoa_frontend
+    environment:
+      - NODE_ENV=production
+      - BACKEND_API_URL=http://xocoa-backend:8000
+    depends_on:
+      - xocoa-backend
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # BACKEND (FastAPI)
+  # -----------------------------
+  xocoa-backend:
+    image: ghcr.io/hrishi-alikatte/xocoa---prototype--backend:latest
+    container_name: xocoa_backend
+    volumes:
+      - ./data:/app/data
+      - ./.env:/app/.env
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://xocoa:xocoa@db:5432/xocoadb}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+    restart: always
+    networks:
+      - xocoa-net
+    depends_on:
+      - db
+      - redis
+
+  # -----------------------------
+  # DATABASE (PostgreSQL + pgvector)
+  # -----------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: xocoa_db
+    environment:
+      - POSTGRES_USER=xocoa
+      - POSTGRES_PASSWORD=xocoa
+      - POSTGRES_DB=xocoadb
+    volumes:
+      - xocoa_db_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # CACHE (Redis)
+  # -----------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: xocoa_redis
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # MONITORING: Prometheus
+  # -----------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: xocoa_prometheus
+    volumes:
+      - ./infrastructure/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # MONITORING: Grafana
+  # -----------------------------
+  grafana:
+    image: grafana/grafana:latest
+    container_name: xocoa_grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./infrastructure/monitoring/grafana/provisioning:/etc/grafana/provisioning
+      - grafana_data:/var/lib/grafana
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # MONITORING: Node Exporter (Host Metrics)
+  # -----------------------------
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: xocoa_node_exporter
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.ignored-mount-points=^/(sys|proc|dev|host|etc)($$|/)'
+    restart: always
+    networks:
+      - xocoa-net
+
+  # -----------------------------
+  # MONITORING: cAdvisor (Container Metrics)
+  # -----------------------------
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: xocoa_cadvisor
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    restart: always
+    networks:
+      - xocoa-net
+
+volumes:
+  xocoa_db_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  xocoa-net:
+    driver: bridge

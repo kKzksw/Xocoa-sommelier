@@ -22,3 +22,9 @@ groq==0.4.0
 streamlit==1.31.0
 pytest==8.0.0
 python-multipart==0.0.9
+
+# Monitoring & Production Readiness
+prometheus-fastapi-instrumentator==7.0.0
+psycopg2-binary==2.9.9
+redis==5.0.1
+sqlalchemy==2.0.27

@@ -1,11 +1,11 @@
 #!/bin/bash
 
-# XOCOA Professional Deployment Script
+# XOCOA V2 Deployment Script (Elite Architect Edition)
 # Usage: ./deploy.sh
 
-echo "🚀 [XOCOA] Starting Zero-Downtime Deployment..."
+echo "🚀 [XOCOA] Starting V2 Production Deployment..."
 
-# 1. Pull latest orchestration config (docker-compose files)
+# 1. Pull latest orchestration config
 echo "📥 [XOCOA] Updating configuration..."
 git pull origin main
 
@@ -17,14 +17,21 @@ fi
 
 # 3. Pull latest pre-built images from GitHub Registry
 echo "⬇️  [XOCOA] Pulling latest containers from GHCR..."
-docker-compose -f docker-compose.prod.yml pull
+docker-compose -f docker-compose.v2.yml pull
 
-# 4. Restart services (Zero-Downtime rolling update logic handled by Compose)
-echo "🔄 [XOCOA] Restarting services..."
-docker-compose -f docker-compose.prod.yml up -d
+# 4. Restart services
+echo "🔄 [XOCOA] Restarting services on V2 Infrastructure..."
+docker-compose -f docker-compose.v2.yml up -d --remove-orphans
 
-# 5. Cleanup
+# 5. Database Maintenance
+echo "🗄️  [XOCOA] Running Database Migrations..."
+# Ensure the backend container is up
+sleep 5
+docker exec xocoa_backend python tools/migrate_to_postgres.py
+
+# 6. Cleanup
 echo "🧹 [XOCOA] Pruning old images..."
 docker image prune -f
 
-echo "✅ [XOCOA] Deployment Complete! System is live with latest code."
+echo "✅ [XOCOA] V2 Deployment Complete! System is live."
+echo "📊 Monitoring: https://xocoa.co/grafana (if configured) or <ip>:3001"

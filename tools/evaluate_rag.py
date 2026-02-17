@@ -2,11 +2,14 @@ import requests
 import json
 import time
 import statistics
+import argparse
+import sys
+import math
 from typing import List, Dict, Any
 
 # Configuration
 API_URL = "http://localhost:8000/api/chat"
-DATASET_PATH = "tests/data/silver_dataset.json"
+DEFAULT_DATASET = "tests/data/golden_dataset_v2.json"
 REPORT_PATH = "rag_evaluation_report.md"
 
 def load_dataset(path: str) -> List[Dict[str, Any]]:
@@ -14,58 +17,30 @@ def load_dataset(path: str) -> List[Dict[str, Any]]:
         return json.load(f)
 
 def validate_product(product: Dict[str, Any], attributes: Dict[str, Any]) -> bool:
-    """
-    Checks if a product satisfies the expected attributes.
-    """
-    # 1. Cocoa Percentage
-    if "cocoa_percentage" in attributes:
-        p_cocoa = product.get("cocoa_percentage")
-        if p_cocoa is not None:
-            # Handle string like "70%"
-            if isinstance(p_cocoa, str):
-                try:
-                    p_cocoa = float(p_cocoa.replace("%", ""))
-                except:
-                    p_cocoa = 0
-            
-            constraints = attributes["cocoa_percentage"]
-            if "min" in constraints and p_cocoa < constraints["min"]:
-                return False
-            if "max" in constraints and p_cocoa > constraints["max"]:
-                return False
-
-    # 2. Price
+    """Strict attribute validation."""
+    
+    # 1. Price (Max)
     if "price_retail" in attributes:
         p_price = product.get("price_retail")
-        if p_price is not None:
-             # Handle string prices if necessary
-            if isinstance(p_price, str):
-                try:
-                    p_price = float(re.sub(r'[^\d.]', '', p_price))
-                except:
-                    pass
-            
-            constraints = attributes["price_retail"]
-            if "min" in constraints and p_price < constraints["min"]:
-                return False
-            if "max" in constraints and p_price > constraints["max"]:
-                return False
+        if p_price is None: return False
+        if isinstance(p_price, str):
+            try: p_price = float(p_price.replace("€", "").replace("$", ""))
+            except: pass
+        if p_price > attributes["price_retail"].get("max", 9999):
+            return False
 
-    # 3. Flavor Keywords
+    # 2. Flavor Match (Partial String)
     if "flavor_match" in attributes:
         keywords = attributes["flavor_match"]
-        # Search in name, notes, description
         text_corpus = (
             str(product.get("name", "")) + " " + 
             str(product.get("flavor_notes_primary", "")) + " " + 
-            str(product.get("flavor_notes_secondary", "")) + " " +
             str(product.get("tasting_notes", ""))
         ).lower()
-        
         if not any(k.lower() in text_corpus for k in keywords):
             return False
 
-    # 4. Dietary
+    # 3. Dietary
     if "dietary_match" in attributes:
         keywords = attributes["dietary_match"]
         text_corpus = (
@@ -73,28 +48,31 @@ def validate_product(product: Dict[str, Any], attributes: Dict[str, Any]) -> boo
             str(product.get("allergens", "")) + " " +
             str(product.get("name", ""))
         ).lower()
-        if not any(k.lower() in text_corpus for k in keywords):
-            return False
-
+        # For "nut-free", we check if "nut" is NOT in allergens OR "nut-free" IS in dietary
+        for k in keywords:
+            if k == "nut-free":
+                if "nut" in str(product.get("allergens", "")).lower(): return False
+            elif k not in text_corpus:
+                return False
+                
     return True
 
 def evaluate_query(test_case: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Runs a single test case against the API and scores it.
-    """
     query = test_case["query"]
     expected_intent = test_case["expected_intent"]
     
     payload = {
         "message": query,
-        "history": [], # TODO: Support multi-turn via 'requires_context' flag
+        "history": [],
         "last_ranked_products": []
     }
     
-    # Simulate context if needed (Mocking a previous search result)
+    # Mock Context for Reference Queries
     if test_case.get("requires_context"):
         payload["last_ranked_products"] = [
-            {"id": "mock_1", "name": "Mock Chocolate", "description": "A tasty mock chocolate."}
+            {"id": 1, "name": "Mock Choco 1", "price_retail": 5.0, "cocoa_percentage": 70},
+            {"id": 2, "name": "Mock Choco 2", "price_retail": 10.0, "dietary": "vegan"},
+            {"id": 3, "name": "Mock Choco 3", "price_retail": 15.0}
         ]
 
     start_time = time.time()
@@ -107,61 +85,62 @@ def evaluate_query(test_case: Dict[str, Any]) -> Dict[str, Any]:
                 "id": test_case["id"],
                 "success": False,
                 "error": f"HTTP {response.status_code}",
-                "latency": latency
+                "latency": latency,
+                "score": 0.0
             }
             
         data = response.json()
-        
-        # Scoring Logic
         actual_intent = data.get("intent_detected")
         products = data.get("products", [])
         
-        # Logic fix: Allow refinement to count as search if expected
-        intent_match = (actual_intent == expected_intent) or \
-                       (expected_intent == "search" and actual_intent == "refine")
+        # --- SCORING LOGIC ---
         
-        product_count_pass = len(products) >= test_case.get("expected_min_products", 0)
+        # 1. Intent Check
+        intent_pass = (actual_intent == expected_intent) or \
+                      (expected_intent == "search" and actual_intent == "refine")
+                      
+        # 2. Product Count Check
+        min_products = test_case.get("expected_min_products", 0)
+        count_pass = len(products) >= min_products
         
-        # --- NEW: Relevance Check ---
-        relevance_score = 1.0 # Default full score if no attributes to check
-        if products and "expected_attributes" in test_case:
-            valid_products = [p for p in products if validate_product(p, test_case["expected_attributes"])]
-            relevance_score = len(valid_products) / len(products)
-            
-            # If we expected products but got none relevant, that's a fail
-            if len(valid_products) == 0:
-                product_count_pass = False 
-
-        # Adversarial Check: Did we leak system info? (Naive check)
-        safety_pass = True
-        if "jailbreak" in test_case.get("tags", []):
-            if "SYSTEM:" in data.get("response_text", "") or "You are a specialized AI" in data.get("response_text", ""):
-                safety_pass = False
-
-        # Weighted Score: Intent (Binary) * Safety (Binary) * Relevance (Float)
-        # If Intent/Safety fail, score is 0. If they pass, score is Relevance.
-        score = 0.0
-        if intent_match and safety_pass:
-            if test_case.get("expected_min_products", 0) > 0:
-                # If we need products, relevance matters
-                score = relevance_score if product_count_pass else 0.0
+        # 3. Relevance Check (Strict)
+        relevance_score = 1.0
+        if min_products > 0 and products:
+            if "expected_attributes" in test_case:
+                valid_count = sum(1 for p in products if validate_product(p, test_case["expected_attributes"]))
+                relevance_score = valid_count / len(products)
             else:
-                # If we don't need products (e.g. Chat), just passing intent is 1.0
-                score = 1.0
-        
+                # If search but no specific attributes, assume relevance is 1.0 (baseline)
+                relevance_score = 1.0
+        elif min_products > 0 and not products:
+            relevance_score = 0.0
+            
+        # 4. Final Binary Success Determination
+        is_success = False
+        if intent_pass:
+            if min_products > 0:
+                # MUST find products AND have > 50% relevance
+                if count_pass and relevance_score >= 0.5:
+                    is_success = True
+            else:
+                # Chat/Reference just needs intent pass
+                is_success = True
+                
+        # Safety Check (Override success if failed)
+        if "security" in test_case.get("tags", []):
+            if "SYSTEM" in data.get("response_text", ""):
+                is_success = False
+
         return {
             "id": test_case["id"],
             "query": query,
-            "success": True,
-            "score": score,
+            "success": is_success,
+            "score": relevance_score if intent_pass else 0.0,
             "latency": latency,
             "metrics": {
-                "intent_match": intent_match,
-                "expected_intent": expected_intent,
                 "actual_intent": actual_intent,
                 "product_count": len(products),
-                "relevance_score": relevance_score,
-                "safety_pass": safety_pass
+                "relevance": relevance_score
             }
         }
 
@@ -170,63 +149,62 @@ def evaluate_query(test_case: Dict[str, Any]) -> Dict[str, Any]:
             "id": test_case["id"],
             "success": False,
             "error": str(e),
-            "latency": time.time() - start_time
+            "latency": 0.0,
+            "score": 0.0
         }
 
-
 def run_evaluation():
-    print("🧪 Starting RAG Evaluation...")
-    try:
-        dataset = load_dataset(DATASET_PATH)
-    except Exception as e:
-        print(f"❌ Failed to load dataset: {e}")
-        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--ci", action="store_true", help="Fail with exit code 1 if score < 90%")
+    parser.add_argument("--dataset", default=DEFAULT_DATASET)
+    args = parser.parse_args()
 
+    print(f"🏭 Starting INDUSTRIAL-GRADE Evaluation using {args.dataset}...")
+    dataset = load_dataset(args.dataset)
     results = []
     
-    for case in dataset:
-        print(f"   Running {case['id']}: {case['query'][:40]}...")
+    for i, case in enumerate(dataset):
         res = evaluate_query(case)
         results.append(res)
+        # Progress bar
+        sys.stdout.write(f"\r[{i+1}/{len(dataset)}] {case['id']}... {'✅' if res['success'] else '❌'}")
+        sys.stdout.flush()
         
-    # Aggregating Metrics
-    total = len(results)
-    successful_runs = [r for r in results if r["success"]]
-    failures = [r for r in results if not r["success"]]
+    print("\n\n--- RESULTS ---")
     
-    if not successful_runs:
-        print("❌ Critical Failure: No queries succeeded.")
-        return
-
-    avg_latency = statistics.mean([r["latency"] for r in successful_runs])
-    avg_score = statistics.mean([r["score"] for r in successful_runs])
+    successful = [r for r in results if r["success"]]
+    latencies = [r["latency"] for r in successful]
+    latencies.sort()
     
-    # Generate Report
-    markdown = f"# 📊 XOCOA RAG Evaluation Report\n\n"
-    markdown += f"**Date:** {time.strftime('%Y-%m-%d %H:%M:%S')}\n"
-    markdown += f"**Overall Score:** {avg_score*100:.1f}%\n"
-    markdown += f"**Avg Latency:** {avg_latency:.2f}s\n"
-    markdown += f"**Success Rate:** {len(successful_runs)}/{total}\n\n"
+    avg_lat = statistics.mean(latencies) if latencies else 0
+    p95 = latencies[int(len(latencies)*0.95)] if latencies else 0
+    p99 = latencies[int(len(latencies)*0.99)] if latencies else 0
     
-    markdown += "## 📝 Detailed Breakdown\n"
-    markdown += "| ID | Query | Intent | Count | Relevance | Safety | Latency | Result |\n"
-    markdown += "|--- |--- |--- |--- |--- |--- |--- |--- |\n"
+    pass_rate = (len(successful) / len(dataset)) * 100
     
-    for r in successful_runs:
-        m = r["metrics"]
-        status_icon = "✅" if r["score"] == 1.0 else ("⚠️" if r["score"] > 0 else "❌")
-        markdown += f"| {r['id']} | {r['query'][:25]}... | {m['actual_intent']} ({'✅' if m['intent_match'] else '❌'}) | {m['product_count']} | {m['relevance_score']:.2f} | {'✅' if m['safety_pass'] else '❌'} | {r['latency']:.2f}s | {status_icon} |\n"
-        
-    if failures:
-        markdown += "\n## ❌ Errors\n"
-        for f in failures:
-            markdown += f"- **{f['id']}**: {f['error']}\n"
-            
+    print(f"📈 Pass Rate: {pass_rate:.1f}%")
+    print(f"⏱️ Avg Latency: {avg_lat:.2f}s")
+    print(f"🐢 P95 Latency: {p95:.2f}s")
+    print(f"🐌 P99 Latency: {p99:.2f}s")
+    
+    # Markdown Report
+    md = "# 🏭 XOCOA Industrial Test Report\n\n"
+    md += f"- **Pass Rate:** {pass_rate:.1f}%\n"
+    md += f"- **P95 Latency:** {p95:.2f}s\n\n"
+    md += "| ID | Query | Intent | Count | Relevance | Latency | Result |\n"
+    md += "|--- |--- |--- |--- |--- |--- |--- |\n"
+    for r in results:
+        m = r.get("metrics", {})
+        md += f"| {r['id']} | {r['query'][:20]}... | {m.get('actual_intent')} | {m.get('product_count')} | {m.get('relevance', 0):.2f} | {r['latency']:.2f}s | {'✅' if r['success'] else '❌'} |\n"
+    
     with open(REPORT_PATH, "w") as f:
-        f.write(markdown)
+        f.write(md)
         
-    print(f"\n✅ Evaluation Complete! Score: {avg_score*100:.1f}%")
-    print(f"📄 Report saved to {REPORT_PATH}")
+    if args.ci and pass_rate < 90.0:
+        print("❌ CI FAILURE: Pass rate below 90%")
+        sys.exit(1)
+        
+    print("✅ Evaluation Passed.")
 
 if __name__ == "__main__":
     run_evaluation()

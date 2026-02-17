@@ -1,5 +1,8 @@
 import os
 import re
+import hashlib
+import json
+import redis
 from typing import List, Dict, Any
 from groq import Groq
 from dotenv import load_dotenv
@@ -8,7 +11,7 @@ load_dotenv()
 
 class LLMExplainer:
     def __init__(self):
-        """Initialize Groq client with API key from .env"""
+        """Initialize Groq client and optional Redis cache"""
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             print("WARNING: GROQ_API_KEY not found. LLM explanations will be disabled.")
@@ -17,6 +20,16 @@ class LLMExplainer:
             self.client = Groq(api_key=api_key)
             
         self.model = "llama-3.1-8b-instant"
+        
+        # Redis Setup
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        try:
+            self.redis = redis.from_url(redis_url)
+            self.redis.ping()
+            print("🚀 Redis Cache Connected")
+        except Exception as e:
+            print(f"⚠️ Redis Connection Failed: {e}. Caching disabled.")
+            self.redis = None
         
         # THE ELITE SOMMELIER: Grounded, Precise, and Multilingual.
         self.system_prompt = (
@@ -36,14 +49,23 @@ class LLMExplainer:
 
     def chat(self, history: List[Dict[str, str]], context_data: str = "") -> str:
         """
-        Handle a conversational turn.
-        history: List of {"role": "user"/"assistant", "content": "..."}
-        context_data: String containing search results or DB stats.
+        Handle a conversational turn with Redis caching.
         """
         if not self.client:
             return "I am unable to chat right now (API Key missing)."
 
-        # Construct messages list
+        # 1. Generate Cache Key
+        cache_key = None
+        if self.redis:
+            # Hash history + context to create a unique key
+            payload = json.dumps({"history": history[-5:], "context": context_data}, sort_keys=True)
+            cache_key = f"xocoa:chat:{hashlib.sha256(payload.encode()).hexdigest()}"
+            
+            cached_response = self.redis.get(cache_key)
+            if cached_response:
+                return cached_response.decode('utf-8')
+
+        # 2. Construct messages list
         messages = [{"role": "system", "content": self.system_prompt}]
         
         # Add conversation history (limited to last 6 turns to save context window)
@@ -73,6 +95,10 @@ class LLMExplainer:
                 
                 # Legacy Frontend Compatibility: Strip Markdown formatting
                 text = text.replace("**", "").replace("__", "")
+                
+                # 3. Save to Cache (1 hour TTL)
+                if self.redis and cache_key:
+                    self.redis.setex(cache_key, 3600, text)
                 
                 return text
 
