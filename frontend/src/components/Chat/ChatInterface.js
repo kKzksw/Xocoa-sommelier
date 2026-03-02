@@ -4,6 +4,12 @@ import FixedChatInput from './FixedChatInput'
 import ChocolateRecommendations from '../Recommendations/ChocolateRecommendations'
 
 export default function ChatInterface() {
+  const SEGMENT_OPTIONS = [
+    { key: 'A', label: 'Taste & flavor experience' },
+    { key: 'B', label: 'Health & ethical sourcing' },
+    { key: 'C', label: 'Good value & familiar brands' }
+  ]
+
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -16,6 +22,7 @@ export default function ChatInterface() {
   const [recommendations, setRecommendations] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [userPreferences, setUserPreferences] = useState({})
+  const [conversationState, setConversationState] = useState({})
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -34,7 +41,8 @@ export default function ChatInterface() {
       timestamp: new Date()
     }
 
-    setMessages(prev => [...prev, userMessage])
+    const nextMessages = [...messages, userMessage]
+    setMessages(nextMessages)
     setIsLoading(true)
 
     try {
@@ -46,24 +54,30 @@ export default function ChatInterface() {
         body: JSON.stringify({
           message: content,
           preferences: userPreferences,
-          conversationHistory: messages.map(msg => ({
+          conversationHistory: nextMessages.map(msg => ({
             type: msg.type,
             content: msg.content
           })),
-          last_ranked_products: recommendations
+          last_ranked_products: recommendations,
+          state: conversationState
         })
       })
 
       const result = await response.json()
+      const fallbackFollowups = Array.isArray(result.followup_questions) && result.followup_questions.length > 0
+        ? result.followup_questions.map((q, idx) => `${idx + 1}. ${q}`).join('\n')
+        : ''
+      const assistantContent = result.message || fallbackFollowups || "I couldn't process that. Please try again."
 
       const assistantMessage = {
         id: Date.now() + 1,
         type: 'assistant',
-        content: result.message,
+        content: assistantContent,
         timestamp: new Date()
       }
 
       setMessages(prev => [...prev, assistantMessage])
+      setConversationState(prev => result.conversation_state || prev)
 
       if (result.preferences) {
         setUserPreferences(prev => ({ ...prev, ...result.preferences }))
@@ -85,6 +99,11 @@ export default function ChatInterface() {
     }
   }
 
+  const handleSegmentSelection = async (segmentKey) => {
+    if (isLoading) return
+    await handleSendMessage(segmentKey)
+  }
+
   return (
     <div className="chat-wrapper">
       <div className="chat-container chat-messages-container" style={{
@@ -101,6 +120,37 @@ export default function ChatInterface() {
             isLoading={isLoading && message === messages[messages.length - 1]}
           />
         ))}
+
+        {!conversationState.segment && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+            margin: '0 2rem 1rem'
+          }}>
+            {SEGMENT_OPTIONS.map((option) => (
+              <button
+                key={option.key}
+                type="button"
+                disabled={isLoading}
+                onClick={() => handleSegmentSelection(option.key)}
+                style={{
+                  border: '1px solid var(--color-primary)',
+                  background: '#fff',
+                  color: 'var(--color-primary)',
+                  borderRadius: '999px',
+                  padding: '0.5rem 0.9rem',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  opacity: isLoading ? 0.65 : 1
+                }}
+              >
+                {option.key}) {option.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {isLoading && (
           <div className="flex justify-start">

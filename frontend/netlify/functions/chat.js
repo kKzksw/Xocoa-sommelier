@@ -11,6 +11,8 @@ const IS_DEBUG = process.env.DEBUG === 'true';
 exports.handler = async (event, context) => {
   // 1. CORS Headers
   const corsValidOrigins = [
+    'https://xocoa.co',
+    'https://www.xocoa.co',
     'https://xocoa-sommelier.com',
     'https://www.xocoa-sommelier.com',
     'https://xocoasommelier.netlify.app',
@@ -39,13 +41,18 @@ exports.handler = async (event, context) => {
   }
 
   try {
-    const { message, conversationHistory } = JSON.parse(event.body);
+    const {
+      message,
+      conversationHistory = [],
+      last_ranked_products = [],
+      state = {}
+    } = JSON.parse(event.body);
     
     // 2. Prepare Payload for Python Master Brain
     // Frontend sends: conversationHistory = [{type: 'user', content: '...'}, ...]
     // Backend expects: history = [{role: 'user', content: '...'}, ...]
     
-    const mappedHistory = (conversationHistory || []).map(msg => ({
+    const mappedHistory = conversationHistory.map(msg => ({
       role: msg.type === 'assistant' ? 'assistant' : 'user',
       content: msg.content
     }));
@@ -56,7 +63,8 @@ exports.handler = async (event, context) => {
     const response = await axios.post(BACKEND_URL, {
       message: message,
       history: mappedHistory,
-      last_ranked_products: [] // Stateless for now, or could store in frontend state
+      last_ranked_products: last_ranked_products,
+      state: state
     }, { timeout: 30000 }); // 30s timeout
 
     const backendData = response.data;
@@ -69,7 +77,9 @@ exports.handler = async (event, context) => {
       message: backendData.response_text,
       recommendations: backendData.products || [],
       preferences: {}, // Decoupled: Backend handles logic internally
-      debug_intent: backendData.intent_detected
+      debug_intent: backendData.intent_detected,
+      followup_questions: backendData.followup_questions || [],
+      conversation_state: backendData.conversation_state || state
     };
 
     // Log for analytics

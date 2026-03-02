@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from prometheus_fastapi_instrumentator import Instrumentator
 
 # Import Core Services
@@ -17,6 +17,13 @@ from channel_c.explainer import LLMExplainer
 from orchestration.intent_router import SemanticIntentRouter
 from orchestration.recommender import RecommenderService
 from orchestration.reference_resolver import resolve_reference
+from orchestration.clarification_engine import (
+    build_retrieval_query,
+    check_clarification,
+    get_segment_selection_prompt,
+    normalize_state,
+    update_state_from_message,
+)
 
 # -----------------------------------------------------------------------------
 # Logging Setup
@@ -33,15 +40,19 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
-    history: List[Message] = []
+    history: List[Message] = Field(default_factory=list)
     # Client should send back the products from the last turn if they exist
     # This enables "reference" resolution (e.g. "tell me about the first one") without server-side session state
     last_ranked_products: Optional[List[Dict[str, Any]]] = None 
+    # Frontend can persist this and send it back each turn (stateless backend memory).
+    state: Dict[str, str] = Field(default_factory=dict)
 
 class ChatResponse(BaseModel):
     response_text: str
-    products: List[Dict[str, Any]] = []
+    products: List[Dict[str, Any]] = Field(default_factory=list)
     intent_detected: str
+    followup_questions: List[str] = Field(default_factory=list)
+    conversation_state: Dict[str, str] = Field(default_factory=dict)
     debug_info: Optional[Dict[str, Any]] = None
 
 # -----------------------------------------------------------------------------
@@ -134,6 +145,9 @@ async def chat_endpoint(request: ChatRequest):
     """
     try:
         user_input = request.message
+        conversation_state = normalize_state(request.state)
+        conversation_state = update_state_from_message(user_input, conversation_state)
+
         # ELITE OPERATOR FIX: Ensure the current message is part of the history for the LLM
         # This fixes the "empty first response" issue caused by React state timing.
         history_dicts = [{"role": m.role, "content": m.content} for m in request.history]
@@ -152,6 +166,32 @@ async def chat_endpoint(request: ChatRequest):
                 if rehydrated:
                     logger.info(f"Rehydrating Context from History: found {len(rehydrated)} products.")
                     request.last_ranked_products = rehydrated
+
+        # 1) Segment must exist before retrieval.
+        if not conversation_state.get("segment"):
+            segment_prompt = get_segment_selection_prompt()
+            return ChatResponse(
+                response_text=segment_prompt,
+                products=[],
+                intent_detected="segment_selection",
+                followup_questions=[segment_prompt],
+                conversation_state=conversation_state,
+                debug_info={"router_score": "hidden", "segment": "missing"},
+            )
+
+        # 2) Clarification gate (max 3 follow-ups).
+        clarification = check_clarification(user_input, conversation_state)
+        if clarification.get("needs_clarification"):
+            followups = clarification.get("followup_questions", [])[:3]
+            prompt_text = "\n".join(f"{i}. {q}" for i, q in enumerate(followups, 1))
+            return ChatResponse(
+                response_text=prompt_text,
+                products=[],
+                intent_detected="clarification",
+                followup_questions=followups,
+                conversation_state=conversation_state,
+                debug_info={"router_score": "hidden", "segment": conversation_state.get("segment", "")},
+            )
 
         # 1. Detect Intent
         router = services["router"]
@@ -190,9 +230,14 @@ async def chat_endpoint(request: ChatRequest):
                 import re
                 match = re.search(r"\[SEARCH: (.*?)\]", response_text)
                 if match:
-                    search_query = match.group(1)
+                    search_query = build_retrieval_query(match.group(1), conversation_state)
                     logger.info(f"LLM Triggered Search: '{search_query}'")
-                    result = recommender.recommend(search_query, top_k=5)
+                    result = recommender.recommend(
+                        search_query,
+                        top_k=5,
+                        segment=conversation_state.get("segment"),
+                        state=conversation_state,
+                    )
                     ranked_ids = result.get("ranked", [])
                     products = [p for p in chocolates if p["id"] in ranked_ids]
                     
@@ -214,12 +259,18 @@ async def chat_endpoint(request: ChatRequest):
                     current_q = last_q + " " + user_input
                     logger.info(f"Refining Search Context: '{current_q}'")
             
-            result = recommender.recommend(current_q, top_k=5)
+            retrieval_query = build_retrieval_query(current_q, conversation_state)
+            result = recommender.recommend(
+                retrieval_query,
+                top_k=5,
+                segment=conversation_state.get("segment"),
+                state=conversation_state,
+            )
             ranked_ids = result.get("ranked", [])
             products = [p for p in chocolates if p["id"] in ranked_ids]
             
             if not products:
-                response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{current_q}' returned zero results.")
+                response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                 if not response_text.strip():
                     response_text = "I am sorry, but I could not find any chocolates that match your search criteria. Would you like to try a different search?"
             else:
@@ -256,11 +307,17 @@ async def chat_endpoint(request: ChatRequest):
                 logger.info(f"Reference intent detected but no context. Falling back to Search for: '{user_input}'")
                 intent = "search"
                 # Proceed to search logic below
-                result = recommender.recommend(user_input, top_k=5)
+                retrieval_query = build_retrieval_query(user_input, conversation_state)
+                result = recommender.recommend(
+                    retrieval_query,
+                    top_k=5,
+                    segment=conversation_state.get("segment"),
+                    state=conversation_state,
+                )
                 ranked_ids = result.get("ranked", [])
                 products = [p for p in chocolates if p["id"] in ranked_ids]
                 if not products:
-                    response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{user_input}' returned zero results.")
+                    response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                 else:
                     list_items = [f"{i}. **{p.get('name')}** ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
                     context_str = f"{lang_instruction}\nDATABASE RESULTS:\n" + "\n".join(list_items)
@@ -285,7 +342,9 @@ async def chat_endpoint(request: ChatRequest):
             response_text=response_text,
             products=products,
             intent_detected=intent,
-            debug_info={"router_score": "hidden"}
+            followup_questions=[],
+            conversation_state=conversation_state,
+            debug_info={"router_score": "hidden", "segment": conversation_state.get("segment", "")}
         )
 
     except Exception as e:
@@ -295,6 +354,8 @@ async def chat_endpoint(request: ChatRequest):
             response_text="I'm having a bit of trouble accessing my chocolate cellar right now. Please try again in a moment.",
             products=[],
             intent_detected="error",
+            followup_questions=[],
+            conversation_state=locals().get("conversation_state", normalize_state({})),
             debug_info={"error": str(e)}
         )
 

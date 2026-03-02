@@ -4,7 +4,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { message, conversationHistory = [], last_ranked_products = [] } = req.body
+    const {
+      message,
+      conversationHistory = [],
+      last_ranked_products = [],
+      state = {}
+    } = req.body
 
     // 1. Map Frontend format (type) to Backend API format (role)
     // The frontend uses 'type: user/assistant', backend needs 'role: user/assistant'
@@ -27,7 +32,8 @@ export default async function handler(req, res) {
       body: JSON.stringify({
         message: message,
         history: cleanHistory,
-        last_ranked_products: last_ranked_products
+        last_ranked_products: last_ranked_products,
+        state: state
       })
     })
 
@@ -43,8 +49,10 @@ export default async function handler(req, res) {
     const frontendResponse = {
       message: data.response_text,
       recommendations: data.products || [],
-      preferences: {}, 
-      intent: data.intent_detected
+      preferences: {},
+      intent: data.intent_detected,
+      followup_questions: data.followup_questions || [],
+      conversation_state: data.conversation_state || state
     }
 
     res.status(200).json(frontendResponse)
