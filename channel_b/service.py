@@ -7,8 +7,6 @@ import numpy as np
 import psycopg2
 from sentence_transformers import SentenceTransformer
 
-from channel_a.normalization.normalize import normalize_country_from_query
-
 class ChannelBService:
     def __init__(self, embeddings_path: str, products_path: str = "data/chocolates.json"):
         self.model = SentenceTransformer("paraphrase-multilingual-mpnet-base-v2")
@@ -109,15 +107,9 @@ class ChannelBService:
         top_k: int,
         min_score: float,
     ) -> List[Tuple[int, float]]:
-        # maker_country hard filter (Channel B)
-        country = normalize_country_from_query(semantic_query)
-        if country and hasattr(self, 'id_to_maker_country') and self.id_to_maker_country:
-            candidate_ids = [
-                pid for pid in candidate_ids
-                if self.id_to_maker_country.get(pid) == country
-            ]
-            if not candidate_ids:
-                return []
+        # Country hard filtering is handled by the agentic policy + recommender
+        # hard filter layer. Do not apply an additional maker-country-only rule
+        # here, otherwise origin_scope=origin_country can be silently overridden.
 
         if not semantic_query.strip():
             return [(pid, 1.0) for pid in candidate_ids[:top_k]]

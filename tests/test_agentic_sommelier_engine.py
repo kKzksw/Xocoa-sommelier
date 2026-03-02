@@ -16,6 +16,22 @@ def test_segment_is_mandatory_first_step():
     assert out["answer_options"] == ["A", "B", "C"]
 
 
+def test_segment_prompt_does_not_loop_forever_on_invalid_reply():
+    state = normalize_state(
+        {
+            "_asked_fields": "segment",
+            "_last_asked_field": "segment",
+        }
+    )
+    out = agent_step("idk", state, candidate_count=500, total_catalog_count=2000)
+    assert out["updated_state"]["segment"] in {
+        "Impulsive-Involved",
+        "Rational Health-Conscious",
+        "Uninvolved",
+    }
+    assert "when choosing chocolate" not in out["question"].lower()
+
+
 def test_country_scope_is_asked_before_segment_when_country_is_explicit():
     state = normalize_state({})
     out = agent_step("I want chocolate from france", state, candidate_count=200)
@@ -216,6 +232,12 @@ def test_origin_constraint_is_extracted_from_user_query():
     assert "origin" in updated["_explicit_hard_fields"]
 
 
+def test_origin_extraction_trims_trailing_context_words():
+    state = normalize_state({})
+    updated = update_state_from_message("i want chocolate from peru for my dad", state)
+    assert updated["origin"] == "Peru"
+
+
 def test_retrieval_query_respects_priority_order():
     state = normalize_state(
         {
@@ -269,3 +291,55 @@ def test_no_answer_to_cocoa_question_does_not_erase_certification():
     )
     updated = update_state_from_message("no", state)
     assert updated["certification"] == "organic"
+
+
+def test_budget_options_parse_correctly():
+    base = normalize_state({"segment": "Uninvolved"})
+    premium = update_state_from_message("Premium (>$40)", base)
+    assert premium["budget"] == "over $40"
+
+    no_limit = update_state_from_message("No budget limit", base)
+    assert no_limit["budget"] == "no budget limit"
+    filters = build_agentic_filters(no_limit)
+    assert "budget" not in filters["hard"]
+
+
+def test_no_preference_for_required_field_stops_repeat_loop():
+    state = normalize_state(
+        {
+            "segment": "Impulsive-Involved",
+            "_clarification_turns": "1",
+            "_asked_fields": "chocolate_type",
+            "_last_asked_field": "chocolate_type",
+        }
+    )
+    out = agent_step("No preference", state, candidate_count=500, total_catalog_count=2000)
+    assert out["updated_state"]["chocolate_type"] == "no preference"
+    assert "milk, dark, or white" not in out["question"].lower()
+
+
+def test_already_asked_required_field_is_not_repeated():
+    state = normalize_state(
+        {
+            "segment": "Rational Health-Conscious",
+            "_clarification_turns": "1",
+            "_asked_fields": "certification",
+            "_last_asked_field": "certification",
+        }
+    )
+    out = agent_step("still not sure", state, candidate_count=500, total_catalog_count=2000)
+    assert out["updated_state"]["certification"] == "not required"
+    assert "certification" not in out["question"].lower()
+
+
+def test_broaden_budget_removes_budget_constraint():
+    state = normalize_state(
+        {
+            "segment": "Uninvolved",
+            "budget": "under $20",
+            "_explicit_hard_fields": "budget",
+        }
+    )
+    updated = update_state_from_message("Broaden budget", state)
+    assert updated["budget"] == "no budget limit"
+    assert "budget" not in updated["_explicit_hard_fields"]

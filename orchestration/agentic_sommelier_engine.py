@@ -125,6 +125,15 @@ ANSWER_OPTIONS_BY_FIELD = {
     "context": ["Romantic gift", "Celebration", "Casual treat"],
 }
 
+NON_CONSTRAINT_VALUES = {
+    "no preference",
+    "any",
+    "whatever",
+    "not sure",
+    "doesn't matter",
+    "doesnt matter",
+}
+
 AMBIGUOUS_ANY_PATTERNS = [
     r"\bany\b",
     r"\banything\b",
@@ -200,6 +209,9 @@ def update_state_from_message(user_message: str, state: Optional[dict]) -> Dict[
     merged = normalize_state(state)
     text = (user_message or "").strip()
     lower = text.lower()
+    relax_targets = _extract_relax_targets(lower)
+    if relax_targets:
+        merged = _apply_relaxation(merged, relax_targets)
 
     segment = detect_segment_from_clickbox(text)
     if segment:
@@ -230,29 +242,38 @@ def update_state_from_message(user_message: str, state: Optional[dict]) -> Dict[
     if intensity:
         merged["intensity"] = intensity
 
-    budget = _extract_budget(lower)
+    budget = "" if "budget" in relax_targets else _extract_budget(lower)
     if budget:
         merged["budget"] = budget
 
-    certification = _extract_certification(
-        lower,
-        merged.get("segment", ""),
-        merged.get("_last_asked_field", ""),
+    certification = (
+        ""
+        if "certification" in relax_targets
+        else _extract_certification(
+            lower,
+            merged.get("segment", ""),
+            merged.get("_last_asked_field", ""),
+        )
     )
     if certification:
         merged["certification"] = certification
 
-    dietary = _extract_dietary(lower)
+    dietary = "" if "dietary" in relax_targets else _extract_dietary(lower)
     if dietary:
         merged["dietary"] = dietary
 
-    cocoa = _extract_cocoa_percentage(lower)
+    cocoa = "" if "cocoa_percentage" in relax_targets else _extract_cocoa_percentage(lower)
     if cocoa:
         merged["cocoa_percentage"] = cocoa
 
-    brand_pref = _extract_brand_preference(lower)
+    brand_pref = "" if "brand_preference" in relax_targets else _extract_brand_preference(lower)
     if brand_pref:
         merged["brand_preference"] = brand_pref
+
+    # Structured option answers like "No preference" should resolve the last
+    # asked field to prevent repeated mandatory-question loops.
+    if _is_no_preference_response(lower):
+        merged = _apply_no_preference_answer(merged)
 
     explicit_hard_fields = _explicit_hard_constraints_in_message(
         origin=origin,
@@ -278,9 +299,7 @@ def build_agentic_filters(state: Optional[dict]) -> Dict[str, dict]:
     explicit_hard = {}
     for field in HARD_CONSTRAINT_FIELDS:
         value = normalized.get(field, "")
-        if not _has_value(value):
-            continue
-        if field == "certification" and str(value).lower() == "not required":
+        if not _is_effective_constraint_value(field, value):
             continue
         if field in tracked_explicit:
             explicit_hard[field] = value
@@ -290,9 +309,7 @@ def build_agentic_filters(state: Optional[dict]) -> Dict[str, dict]:
         if field in explicit_hard:
             continue
         value = normalized.get(field, "")
-        if not _has_value(value):
-            continue
-        if field == "certification" and str(value).lower() == "not required":
+        if not _is_effective_constraint_value(field, value):
             continue
         inferred_hard[field] = value
 
@@ -310,7 +327,7 @@ def build_agentic_filters(state: Optional[dict]) -> Dict[str, dict]:
     soft_weights = {}
     for field in SOFT_PREFERENCE_FIELDS:
         value = normalized.get(field, "")
-        if _has_value(value):
+        if _is_effective_constraint_value(field, value):
             soft_weights[field] = value
 
     return {
@@ -454,14 +471,28 @@ def agent_step(
             }
 
     # Mandatory first step: segment must be selected via click-box before retrieval.
+    # To prevent dead loops, if this prompt was already asked and still unresolved,
+    # infer a best-effort segment from current constraints and continue.
     if segment not in SEGMENT_REQUIRED_FIELDS:
-        return {
-            "action": "ASK",
-            "question": SEGMENT_SELECTION_PROMPT,
-            "answer_options": ["A", "B", "C"],
-            "filters": filters,
-            "updated_state": updated_state,
-        }
+        if "segment" in _asked_fields(updated_state) and (user_message or "").strip():
+            inferred_segment = _infer_segment_from_state(updated_state)
+            if inferred_segment:
+                updated_state["segment"] = inferred_segment
+                segment = inferred_segment
+            else:
+                updated_state["segment"] = "Impulsive-Involved"
+                segment = "Impulsive-Involved"
+            filters = build_agentic_filters(updated_state)
+            missing_required = compute_missing_required_fields(updated_state)
+        else:
+            updated_state = _record_asked_field(updated_state, "segment", increment_turn=False)
+            return {
+                "action": "ASK",
+                "question": SEGMENT_SELECTION_PROMPT,
+                "answer_options": ["A", "B", "C"],
+                "filters": filters,
+                "updated_state": updated_state,
+            }
 
     # Ambiguity handling: first ambiguous answer keeps narrowing by asking one
     # more concrete question; repeated ambiguity falls back to tasting flight.
@@ -517,14 +548,35 @@ def agent_step(
         }
 
     # Required field collection step.
+    # Never ask the same required field in a loop. If a required field was already
+    # asked but remains unresolved, auto-relax to a neutral value and continue.
     if missing_required:
-        field = missing_required[0]
-        question = _question_for_field(segment, field, updated_state)
-        updated_state = _record_question(updated_state, field)
+        asked_fields = _asked_fields(updated_state)
+        unasked_required = [field for field in missing_required if field not in asked_fields]
+        if not unasked_required:
+            for field in missing_required:
+                updated_state = _apply_unresolved_required_fallback(updated_state, field)
+            filters = build_agentic_filters(updated_state)
+            missing_required = compute_missing_required_fields(updated_state)
+        else:
+            field = unasked_required[0]
+            question = _question_for_field(segment, field, updated_state)
+            updated_state = _record_question(updated_state, field)
+            return {
+                "action": "ASK",
+                "question": question,
+                "answer_options": _answer_options_for_field(field),
+                "filters": filters,
+                "updated_state": updated_state,
+            }
+
+    if missing_required:
+        # Safety net: if anything still unresolved after fallback, retrieve
+        # instead of repeating asks.
         return {
-            "action": "ASK",
-            "question": question,
-            "answer_options": _answer_options_for_field(field),
+            "action": "RETRIEVE",
+            "question": "",
+            "answer_options": [],
             "filters": filters,
             "updated_state": updated_state,
         }
@@ -630,9 +682,18 @@ def _missing_optional_fields(segment: str, state: Dict[str, str]) -> List[str]:
 
 
 def _record_question(state: Dict[str, str], field: str) -> Dict[str, str]:
+    return _record_asked_field(state, field, increment_turn=True)
+
+
+def _record_asked_field(
+    state: Dict[str, str],
+    field: str,
+    increment_turn: bool = True,
+) -> Dict[str, str]:
     updated = normalize_state(state)
-    turns = get_clarification_turns(updated)
-    updated["_clarification_turns"] = str(turns + 1)
+    if increment_turn:
+        turns = get_clarification_turns(updated)
+        updated["_clarification_turns"] = str(turns + 1)
 
     asked = _asked_fields(updated)
     asked.add(field)
@@ -743,6 +804,22 @@ def _extract_origin(lower: str) -> str:
         "canadian": "Canada",
         "brazil": "Brazil",
         "brazilian": "Brazil",
+        "peru": "Peru",
+        "peruvian": "Peru",
+        "ecuador": "Ecuador",
+        "ecuadorian": "Ecuador",
+        "venezuela": "Venezuela",
+        "venezuelan": "Venezuela",
+        "madagascar": "Madagascar",
+        "madagascan": "Madagascar",
+        "austria": "Austria",
+        "austrian": "Austria",
+        "mexico": "Mexico",
+        "mexican": "Mexico",
+        "india": "India",
+        "indian": "India",
+        "ghana": "Ghana",
+        "ghanian": "Ghana",
     }
 
     for alias, canonical in sorted(origin_aliases.items(), key=lambda x: len(x[0]), reverse=True):
@@ -755,6 +832,11 @@ def _extract_origin(lower: str) -> str:
         return ""
 
     candidate = re.sub(r"\s+", " ", match.group(1)).strip(" .,!?:;")
+    candidate = re.split(
+        r"\b(?:for|with|under|over|above|below|that|which|who|because|while|gift|present|dad|mom|today)\b",
+        candidate,
+        maxsplit=1,
+    )[0].strip(" .,!?:;")
     stopwords = {
         "our database",
         "the database",
@@ -846,6 +928,16 @@ def _extract_intensity(lower: str) -> str:
 
 
 def _extract_budget(lower: str) -> str:
+    if re.search(r"\b(broaden|relax|widen|loosen)\b.*\bbudget\b", lower):
+        return ""
+
+    if any(phrase in lower for phrase in ["no budget limit", "any budget", "no limit"]):
+        return "no budget limit"
+
+    gt_match = re.search(r"(?:>=|>|over|above|at least|more than)\s*\$?\s*(\d+(?:\.\d+)?)", lower)
+    if gt_match:
+        return f"over ${gt_match.group(1)}"
+
     range_match = re.search(r"\$?\s*(\d+(?:\.\d+)?)\s*(?:-|to)\s*\$?\s*(\d+(?:\.\d+)?)", lower)
     if range_match:
         return f"${range_match.group(1)}-${range_match.group(2)}"
@@ -862,7 +954,7 @@ def _extract_budget(lower: str) -> str:
     if dollar_value:
         return f"around ${dollar_value.group(1)}"
 
-    if any(k in lower for k in ["cheap", "affordable", "budget", "low cost"]):
+    if any(k in lower for k in ["cheap", "affordable", "budget-friendly", "low cost"]):
         return "budget-friendly"
     if any(k in lower for k in ["premium", "luxury", "high-end", "expensive", "higher budget", "more expensive"]):
         return "premium"
@@ -888,6 +980,8 @@ def _extract_certification(lower: str, segment: str, last_asked_field: str = "")
 
     # Only map bare yes/no to certification when the last asked field was certification.
     # This avoids corrupting state when user says "no" to cocoa percentage question.
+    if last_asked_field == "certification" and re.search(r"\b(not sure|unsure|don't know|dont know)\b", lower):
+        return ""
     if (
         segment == "Rational Health-Conscious"
         and last_asked_field == "certification"
@@ -951,6 +1045,115 @@ def _is_any_ambiguous_response(user_message: str) -> bool:
 
 def _has_value(value: str) -> bool:
     return bool(str(value).strip())
+
+
+def _is_effective_constraint_value(field: str, value: str) -> bool:
+    text = str(value or "").strip().lower()
+    if not text:
+        return False
+    if field == "certification" and text == "not required":
+        return False
+    if field == "budget" and text == "no budget limit":
+        return False
+    return text not in NON_CONSTRAINT_VALUES
+
+
+def _extract_relax_targets(lower: str) -> Set[str]:
+    text = (lower or "").strip().lower()
+    if not text:
+        return set()
+    if not re.search(r"\b(broaden|relax|widen|loosen)\b", text):
+        return set()
+
+    targets: Set[str] = set()
+    if "budget" in text:
+        targets.add("budget")
+    if "certification" in text or "certifications" in text:
+        targets.add("certification")
+    if "dietary" in text or "diet" in text:
+        targets.add("dietary")
+    if "cocoa" in text:
+        targets.add("cocoa_percentage")
+        targets.add("intensity")
+    if "intensity" in text:
+        targets.add("intensity")
+    if "flavor" in text or "taste" in text:
+        targets.add("flavor_direction")
+    if "brand" in text:
+        targets.add("brand_preference")
+    if "origin" in text or "country" in text:
+        targets.add("origin")
+        targets.add("origin_scope")
+    if "type" in text or "milk" in text or "dark" in text or "white" in text:
+        targets.add("chocolate_type")
+    return targets
+
+
+def _apply_relaxation(state: Dict[str, str], targets: Set[str]) -> Dict[str, str]:
+    updated = normalize_state(state)
+    for field in targets:
+        if field == "budget":
+            updated["budget"] = "no budget limit"
+        elif field == "certification":
+            updated["certification"] = "not required"
+        elif field in updated:
+            updated[field] = ""
+
+    tracked = _explicit_hard_fields(updated)
+    for field in targets:
+        tracked.discard(field)
+    updated["_explicit_hard_fields"] = ",".join(sorted(tracked))
+    return updated
+
+
+def _is_no_preference_response(lower: str) -> bool:
+    text = (lower or "").strip().lower()
+    if not text:
+        return False
+    return bool(
+        re.search(r"\b(no preference|any|whatever|up to you|doesn'?t matter|dont care|don't care)\b", text)
+        or text in {"not sure", "i dont know", "i don't know"}
+    )
+
+
+def _apply_no_preference_answer(state: Dict[str, str]) -> Dict[str, str]:
+    updated = normalize_state(state)
+    last_field = updated.get("_last_asked_field", "")
+    if not last_field:
+        return updated
+    if last_field == "budget":
+        updated["budget"] = "no budget limit"
+    elif last_field == "certification":
+        updated["certification"] = "not required"
+    elif last_field in updated:
+        updated[last_field] = "no preference"
+    return updated
+
+
+def _apply_unresolved_required_fallback(state: Dict[str, str], field: str) -> Dict[str, str]:
+    updated = normalize_state(state)
+    if field == "budget":
+        updated["budget"] = "no budget limit"
+    elif field == "certification":
+        updated["certification"] = "not required"
+    elif field in updated:
+        updated[field] = "no preference"
+    return updated
+
+
+def _infer_segment_from_state(state: Dict[str, str]) -> str:
+    # Best-effort segment inference to avoid repeated segment prompts.
+    if _has_value(state.get("certification", "")) or _has_value(state.get("dietary", "")):
+        return "Rational Health-Conscious"
+    if _has_value(state.get("budget", "")) or _has_value(state.get("brand_preference", "")):
+        return "Uninvolved"
+    if (
+        _has_value(state.get("chocolate_type", ""))
+        or _has_value(state.get("flavor_direction", ""))
+        or _has_value(state.get("intensity", ""))
+    ):
+        return "Impulsive-Involved"
+    return ""
 
 
 def _dynamic_retrieve_threshold(total_catalog_count: Optional[int]) -> int:

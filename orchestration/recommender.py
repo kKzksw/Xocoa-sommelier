@@ -577,13 +577,22 @@ class RecommenderService:
 
         matched: List[str] = []
         relaxed: Set[str] = set(relaxed_by_filter)
+        origin_scope = hard.get("origin_scope") or normalized_state.get("origin_scope", "")
 
         top_ids = ranked_ids[:5]
         for field in active_fields:
             value = hard.get(field) or normalized_state.get(field)
             if not value:
                 continue
-            statuses = [self._field_status(field, self.product_by_id.get(pid, {}), value) for pid in top_ids]
+            statuses = [
+                self._field_status(
+                    field,
+                    self.product_by_id.get(pid, {}),
+                    value,
+                    origin_scope=origin_scope,
+                )
+                for pid in top_ids
+            ]
             if any(status == "match" for status in statuses):
                 matched.append(field)
             elif any(status == "unknown" for status in statuses):
@@ -603,9 +612,9 @@ class RecommenderService:
             "tradeoff": tradeoff,
         }
 
-    def _field_status(self, field: str, product: dict, value: str) -> str:
+    def _field_status(self, field: str, product: dict, value: str, origin_scope: str = "") -> str:
         if field == "origin":
-            return self._origin_match_status(product, value)
+            return self._origin_match_status(product, value, origin_scope)
         if field == "chocolate_type":
             return self._type_match_status(product, value)
         if field == "budget":
@@ -646,6 +655,8 @@ class RecommenderService:
             return (None, None)
 
         lower = text.lower()
+        if "no budget limit" in lower or "no limit" in lower:
+            return (None, None)
         range_match = re.search(r"(\d+(?:\.\d+)?)\s*-\s*(\d+(?:\.\d+)?)", lower)
         if range_match:
             return (float(range_match.group(1)), float(range_match.group(2)))
