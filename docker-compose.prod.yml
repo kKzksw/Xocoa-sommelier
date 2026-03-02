@@ -41,7 +41,7 @@ services:
     container_name: xocoa_frontend
     environment:
       - NODE_ENV=production
-      - BACKEND_API_URL=http://xocoa-backend:8000
+      - BACKEND_API_URL=http://xocoa-backend:8000/api/chat
     depends_on:
       - xocoa-backend
     restart: always

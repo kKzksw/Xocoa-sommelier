@@ -126,6 +126,116 @@ def detect_segment_from_clickbox(user_message: str) -> Optional[str]:
     return None
 
 
+def is_ambiguous_message(user_message: str) -> bool:
+    """
+    Generic ambiguity detector used before segment is known.
+    """
+    lower = (user_message or "").strip().lower()
+    if not lower:
+        return True
+
+    if detect_segment_from_clickbox(lower):
+        return True
+
+    generic_patterns = [
+        r"^chocolate$",
+        r"^recommend( me)?$",
+        r"^anything$",
+        r"^something good$",
+        r"^good chocolate$",
+        r"^i want good chocolate$",
+        r"^i want some chocolate$",
+        r"^i want chocolate$",
+        r"^want chocolate$",
+        r"^help me choose$",
+        r"^show me some$",
+    ]
+    if any(re.fullmatch(pattern, lower) for pattern in generic_patterns):
+        return True
+
+    # If user mentions "chocolate" but gives no concrete preference signal,
+    # we treat it as ambiguous and trigger segment click-box.
+    if "chocolate" in lower and not _has_concrete_preference_signal(lower):
+        return True
+
+    tokens = [t for t in re.split(r"\s+", lower) if t]
+    return len(tokens) <= 2
+
+
+def infer_segment_from_query(user_message: str, state: Optional[dict] = None) -> Optional[str]:
+    """
+    Infer a segment from a specific query so we don't force click-box upfront.
+    """
+    normalized = normalize_state(state)
+    lower = (user_message or "").strip().lower()
+
+    clickbox_segment = detect_segment_from_clickbox(lower)
+    if clickbox_segment:
+        return clickbox_segment
+
+    # Prefer explicit signals already extracted in state.
+    if normalized.get("certification"):
+        return "Rational Health-Conscious"
+    if normalized.get("budget") or normalized.get("brand_preference"):
+        return "Uninvolved"
+    if normalized.get("taste") or normalized.get("intensity"):
+        return "Impulsive-Involved"
+
+    health_tokens = [
+        "organic",
+        "fair trade",
+        "fairtrade",
+        "ethical",
+        "sustainable",
+        "sustainability",
+        "dietary",
+        "vegan",
+        "dairy-free",
+        "gluten-free",
+        "low sugar",
+        "keto",
+    ]
+    value_tokens = [
+        "budget",
+        "price",
+        "cheap",
+        "affordable",
+        "value",
+        "familiar brand",
+        "mainstream",
+        "trusted brand",
+        "under $",
+        "below $",
+    ]
+    taste_tokens = [
+        "flavor",
+        "taste",
+        "dark",
+        "milk",
+        "white",
+        "fruity",
+        "nutty",
+        "caramel",
+        "spicy",
+        "sweet",
+        "bitter",
+        "cocoa",
+        "%",
+        "intense",
+        "smooth",
+        "creamy",
+    ]
+
+    if any(token in lower for token in health_tokens):
+        return "Rational Health-Conscious"
+    if any(token in lower for token in value_tokens):
+        return "Uninvolved"
+    if any(token in lower for token in taste_tokens):
+        return "Impulsive-Involved"
+
+    return None
+
+
 def update_state_from_message(user_message: str, state: Optional[dict]) -> Dict[str, str]:
     """
     Parse structured preference signals from user free-text and merge into state.
@@ -264,9 +374,9 @@ def _build_followup_questions(
                 continue
             questions.append(_apply_gift_modifier(segment, q, state))
 
-        # We can add up to 2 more segment questions in the same clarification turn.
-        # This keeps total questions <= 3 while collecting richer context early.
-        questions.extend(_optional_question_bundle(segment, is_gift, optional_questions))
+        # Only add optional follow-ups that are still missing in state.
+        # This avoids repeatedly asking the same 3 questions every turn.
+        questions.extend(_optional_questions_for_missing_state(segment, state, is_gift, optional_questions))
         return _dedupe_preserve_order(questions)[:3]
 
     if ambiguous_query:
@@ -301,6 +411,35 @@ def _optional_question_bundle(segment: str, is_gift: bool, optional_questions: L
     return []
 
 
+def _optional_questions_for_missing_state(
+    segment: str,
+    state: Dict[str, str],
+    is_gift: bool,
+    optional_questions: List[str],
+) -> List[str]:
+    questions: List[str] = []
+    if segment == "Rational Health-Conscious":
+        if not state.get("dietary"):
+            questions.append(optional_questions[0])
+        if not state.get("cocoa_percentage"):
+            questions.append(optional_questions[1])
+        return questions
+
+    if segment == "Impulsive-Involved":
+        if not state.get("intensity"):
+            questions.append(optional_questions[0])
+        # Gift nuance for this segment is covered once required is complete.
+        return questions
+
+    if segment == "Uninvolved":
+        if not state.get("brand_preference"):
+            questions.append(optional_questions[0])
+        # Avoid asking gift-packaging question repeatedly (no dedicated state slot).
+        return questions
+
+    return questions
+
+
 def _apply_gift_modifier(segment: str, question: str, state: Dict[str, str]) -> str:
     if state.get("context") != "gift":
         return question
@@ -317,28 +456,12 @@ def _apply_gift_modifier(segment: str, question: str, state: Dict[str, str]) -> 
 
 
 def _is_ambiguous_query(user_message: str, segment: str, state: Dict[str, str]) -> bool:
-    lower = (user_message or "").strip().lower()
-
-    if detect_segment_from_clickbox(lower):
-        return True
-
     # If any required field is already present, we do not consider this ambiguous.
     required = SEGMENT_REQUIRED_FIELDS.get(segment, [])
     if any(_has_value(state.get(field, "")) for field in required):
         return False
 
-    generic_patterns = [
-        r"^chocolate$",
-        r"^recommend( me)?$",
-        r"^anything$",
-        r"^something good$",
-        r"^help me choose$",
-    ]
-    if any(re.fullmatch(pattern, lower) for pattern in generic_patterns):
-        return True
-
-    tokens = [t for t in re.split(r"\s+", lower) if t]
-    return len(tokens) <= 2
+    return is_ambiguous_message(user_message)
 
 
 def _extract_taste_preferences(lower: str) -> List[str]:
@@ -376,7 +499,7 @@ def _extract_budget(lower: str) -> str:
 
     if any(k in lower for k in ["cheap", "affordable", "budget"]):
         return "budget-friendly"
-    if any(k in lower for k in ["premium", "luxury", "high-end"]):
+    if any(k in lower for k in ["premium", "luxury", "high-end", "expensive", "higher budget", "no budget limit"]):
         return "premium"
     return ""
 
@@ -452,6 +575,45 @@ def _extract_brand_preference(lower: str) -> str:
 
 def _has_gift_context(lower: str) -> bool:
     return bool(re.search(r"\b(gift|birthday|present|anniversary|celebration)\b", lower))
+
+
+def _has_concrete_preference_signal(lower: str) -> bool:
+    # Distinguish truly vague asks from preference-bearing asks.
+    signal_tokens = [
+        "dark",
+        "milk",
+        "white",
+        "fruity",
+        "nutty",
+        "caramel",
+        "spicy",
+        "sweet",
+        "bitter",
+        "vegan",
+        "dairy-free",
+        "gluten-free",
+        "keto",
+        "organic",
+        "fair trade",
+        "ethical",
+        "sustainable",
+        "budget",
+        "price",
+        "under",
+        "below",
+        "cheap",
+        "affordable",
+        "premium",
+        "brand",
+        "gift",
+    ]
+    if any(token in lower for token in signal_tokens):
+        return True
+    if re.search(r"\d+\s?%", lower):
+        return True
+    if re.search(r"\$\s*\d+", lower):
+        return True
+    return False
 
 
 def _has_value(value: str) -> bool:

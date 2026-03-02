@@ -1,6 +1,7 @@
 import json
 import os
 import logging
+import re
 from typing import List, Optional, Dict, Any
 from contextlib import asynccontextmanager
 
@@ -17,11 +18,14 @@ from channel_c.explainer import LLMExplainer
 from orchestration.intent_router import SemanticIntentRouter
 from orchestration.recommender import RecommenderService
 from orchestration.reference_resolver import resolve_reference
-from orchestration.clarification_engine import (
-    build_retrieval_query,
-    check_clarification,
-    get_segment_selection_prompt,
+from orchestration.agentic_sommelier_engine import (
+    SEGMENT_SELECTION_PROMPT,
+    agent_step,
+    build_agentic_filters,
+    build_agentic_retrieval_query,
+    get_clarification_turns,
     normalize_state,
+    set_ambiguity_helper,
     update_state_from_message,
 )
 
@@ -52,6 +56,7 @@ class ChatResponse(BaseModel):
     products: List[Dict[str, Any]] = Field(default_factory=list)
     intent_detected: str
     followup_questions: List[str] = Field(default_factory=list)
+    answer_options: List[str] = Field(default_factory=list)
     conversation_state: Dict[str, str] = Field(default_factory=dict)
     debug_info: Optional[Dict[str, Any]] = None
 
@@ -59,6 +64,177 @@ class ChatResponse(BaseModel):
 # Global State (Loaded on Startup)
 # -----------------------------------------------------------------------------
 services = {}
+SIMILARITY_CONFIDENCE_MIN = 0.65
+SIMILARITY_VARIANCE_MIN = 0.0008
+
+
+def _low_retrieval_confidence(result: Dict[str, Any]) -> bool:
+    max_similarity = float(result.get("max_similarity", 0.0) or 0.0)
+    variance = float(result.get("similarity_variance", 0.0) or 0.0)
+    return max_similarity < SIMILARITY_CONFIDENCE_MIN or variance < SIMILARITY_VARIANCE_MIN
+
+
+def _contradicts_available_results(text: str) -> bool:
+    lower = (text or "").lower()
+    contradiction_markers = [
+        "couldn't find",
+        "could not find",
+        "no match",
+        "no matches",
+        "not find a match",
+        "no results",
+    ]
+    return any(marker in lower for marker in contradiction_markers)
+
+
+def _fallback_sommelier_recommendation(products: List[Dict[str, Any]], max_items: int = 5) -> str:
+    selected = products[:max_items]
+    if not selected:
+        return "I couldn't find a confident match. Could you share one more preference?"
+    lines = ["Here are my top chocolate recommendations for you:"]
+    for idx, p in enumerate(selected, 1):
+        name = p.get("name", "Unknown chocolate")
+        brand = p.get("brand", "Unknown maker")
+        cocoa = p.get("cocoa_percentage", "?")
+        price = p.get("price_retail", "N/A")
+        currency = p.get("price_currency", "USD")
+        notes = ", ".join(
+            [
+                str(p.get("flavor_notes_primary", "")).strip(),
+                str(p.get("flavor_notes_secondary", "")).strip(),
+            ]
+        ).strip(", ").strip()
+        why = f"{notes}" if notes else "balanced artisanal profile"
+        lines.append(
+            f"{idx}. {name} by {brand} ({cocoa}% cocoa, {price} {currency}) - Why it fits: {why}."
+        )
+    return "\n".join(lines)
+
+
+def _format_explanation_layer(layer: Optional[Dict[str, Any]]) -> str:
+    if not isinstance(layer, dict):
+        return ""
+    matched = layer.get("matched_preferences", [])
+    relaxed = layer.get("relaxed_preferences", [])
+    tradeoff = str(layer.get("tradeoff", "")).strip()
+
+    matched_str = ", ".join(matched) if matched else "none explicitly matched"
+    relaxed_str = ", ".join(relaxed) if relaxed else "none"
+
+    lines = [
+        "Matched preferences: " + matched_str,
+        "Relaxed preferences: " + relaxed_str,
+    ]
+    if tradeoff:
+        lines.append("Tradeoff: " + tradeoff)
+    return "\n".join(lines)
+
+
+def _flavor_direction_label(product: Dict[str, Any]) -> str:
+    blob = " ".join(
+        [
+            str(product.get("flavor_notes_primary", "")),
+            str(product.get("flavor_notes_secondary", "")),
+            str(product.get("tasting_notes", "")),
+        ]
+    ).lower()
+    if any(k in blob for k in ["fruit", "berry", "citrus", "plum", "peach"]):
+        return "Fruity & bright"
+    if any(k in blob for k in ["nut", "hazelnut", "almond", "praline", "caramel", "toffee"]):
+        return "Nutty & gourmand"
+    if any(k in blob for k in ["pepper", "spice", "chili", "smoke", "wood", "earth"]):
+        return "Bold & intense"
+    return "Classic balanced"
+
+
+def _build_tasting_flight_prompt(products: List[Dict[str, Any]]) -> tuple[str, List[str]]:
+    if not products:
+        return (
+            "I can prepare a tasting flight, but I need one hint: do you want fruity, nutty, or intense?",
+            ["Fruity & bright", "Nutty & gourmand", "Bold & intense"],
+        )
+
+    lines = ["Here is a 3-piece tasting flight to help you pick your direction:"]
+    options: List[str] = []
+    for idx, product in enumerate(products[:3], 1):
+        direction = _flavor_direction_label(product)
+        name = product.get("name", "Unknown chocolate")
+        brand = product.get("brand", "Unknown maker")
+        cocoa = product.get("cocoa_percentage", "?")
+        lines.append(f"{idx}. {name} by {brand} ({cocoa}% cocoa) - Direction: {direction}")
+        if direction not in options:
+            options.append(direction)
+
+    lines.append("Which direction should I focus on next?")
+    return "\n".join(lines), options[:3]
+
+
+def _is_more_recommendations_request(text: str) -> bool:
+    lower = (text or "").strip().lower()
+    if not lower:
+        return False
+    return bool(
+        re.search(
+            r"\b(another|more|other|else|different)\b.*\b(recommendation|recommend|option|options|choice|choices)\b",
+            lower,
+        )
+        or re.search(r"\b(show me|give me)\b.*\b(more|another|other)\b", lower)
+        or lower in {"more", "another", "something else", "other options"}
+    )
+
+
+def _extract_product_ids(products: Optional[List[Dict[str, Any]]]) -> List[int]:
+    ids: List[int] = []
+    for product in products or []:
+        pid = product.get("id")
+        try:
+            ids.append(int(pid))
+        except (TypeError, ValueError):
+            continue
+    return ids
+
+
+def _read_shown_product_ids(state: Dict[str, str]) -> List[int]:
+    raw = (state or {}).get("_shown_product_ids", "")
+    if not raw:
+        return []
+    ids: List[int] = []
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        try:
+            ids.append(int(token))
+        except ValueError:
+            continue
+    return ids
+
+
+def _write_shown_product_ids(state: Dict[str, str], ids: List[int]) -> Dict[str, str]:
+    unique_sorted = sorted({int(pid) for pid in ids})
+    state["_shown_product_ids"] = ",".join(str(pid) for pid in unique_sorted)
+    return state
+
+
+def _filter_unseen_products(
+    products: List[Dict[str, Any]],
+    seen_ids: List[int],
+    limit: int = 5,
+) -> List[Dict[str, Any]]:
+    seen = {int(pid) for pid in seen_ids}
+    unseen = []
+    for product in products:
+        pid = product.get("id")
+        try:
+            pid_int = int(pid)
+        except (TypeError, ValueError):
+            continue
+        if pid_int in seen:
+            continue
+        unseen.append(product)
+        if len(unseen) >= limit:
+            break
+    return unseen
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -90,6 +266,8 @@ async def lifespan(app: FastAPI):
         # 4. Init Channel C (The Persona)
         logger.info(">>> Initializing Channel C (LLM)...")
         explainer = LLMExplainer()
+        # Optional LLM ambiguity helper for the agentic clarification policy.
+        set_ambiguity_helper(explainer.structured_ambiguity_check)
         
         # 5. Init Orchestration
         logger.info(">>> Initializing Router & Recommender...")
@@ -148,12 +326,11 @@ async def chat_endpoint(request: ChatRequest):
         conversation_state = normalize_state(request.state)
         conversation_state = update_state_from_message(user_input, conversation_state)
 
-        # ELITE OPERATOR FIX: Ensure the current message is part of the history for the LLM
-        # This fixes the "empty first response" issue caused by React state timing.
+        # Ensure current user turn is always part of LLM history.
         history_dicts = [{"role": m.role, "content": m.content} for m in request.history]
         if not history_dicts or history_dicts[-1]["content"] != user_input:
             history_dicts.append({"role": "user", "content": user_input})
-        
+
         # 0. Context Rehydration (Self-Healing)
         if not request.last_ranked_products and request.history:
             last_bot_msg = next((m.content for m in reversed(request.history) if m.role == "assistant"), None)
@@ -167,37 +344,113 @@ async def chat_endpoint(request: ChatRequest):
                     logger.info(f"Rehydrating Context from History: found {len(rehydrated)} products.")
                     request.last_ranked_products = rehydrated
 
-        # 1) Segment must exist before retrieval.
-        if not conversation_state.get("segment"):
-            segment_prompt = get_segment_selection_prompt()
-            return ChatResponse(
-                response_text=segment_prompt,
-                products=[],
-                intent_detected="segment_selection",
-                followup_questions=[segment_prompt],
-                conversation_state=conversation_state,
-                debug_info={"router_score": "hidden", "segment": "missing"},
-            )
-
-        # 2) Clarification gate (max 3 follow-ups).
-        clarification = check_clarification(user_input, conversation_state)
-        if clarification.get("needs_clarification"):
-            followups = clarification.get("followup_questions", [])[:3]
-            prompt_text = "\n".join(f"{i}. {q}" for i, q in enumerate(followups, 1))
-            return ChatResponse(
-                response_text=prompt_text,
-                products=[],
-                intent_detected="clarification",
-                followup_questions=followups,
-                conversation_state=conversation_state,
-                debug_info={"router_score": "hidden", "segment": conversation_state.get("segment", "")},
-            )
-
-        # 1. Detect Intent
+        # 1) Agentic decision layer before retrieval.
+        # Explicit constraints from the user message are already merged into state
+        # above, so candidate estimation uses those hard filters before segment Q&A.
         router = services["router"]
         explainer = services["explainer"]
         recommender = services["recommender"]
         chocolates = services["chocolates"]
+
+        filter_bundle = build_agentic_filters(conversation_state)
+        # Probe query for stop-condition should reflect hard constraint narrowing only.
+        # Do not include soft preferences from this turn, otherwise scope appears
+        # artificially small and clarification can stop too early.
+        probe_query = build_agentic_retrieval_query(
+            "",
+            conversation_state,
+            include_soft_preferences=False,
+            include_context=False,
+        )
+        candidate_count = recommender.estimate_candidate_count(
+            probe_query,
+            hard_filters=filter_bundle.get("hard"),
+        )
+
+        decision = agent_step(
+            user_input,
+            conversation_state,
+            candidate_count,
+            total_catalog_count=len(chocolates),
+        )
+        conversation_state = normalize_state(decision.get("updated_state", conversation_state))
+        agent_action = str(decision.get("action", "RETRIEVE"))
+        agent_question = str(decision.get("question", "")).strip()
+        agent_answer_options = [
+            str(option).strip()
+            for option in decision.get("answer_options", [])
+            if str(option).strip()
+        ]
+        fallback_mode = str(decision.get("fallback_mode", "")).strip()
+        if agent_action in {"ASK", "FILTER"} and agent_question:
+            is_segment_prompt = agent_question.strip() == SEGMENT_SELECTION_PROMPT.strip()
+            return ChatResponse(
+                response_text=agent_question,
+                products=[],
+                intent_detected="segment_selection" if is_segment_prompt else "clarification",
+                followup_questions=[agent_question],
+                answer_options=agent_answer_options,
+                conversation_state=conversation_state,
+                debug_info={
+                    "router_score": "hidden",
+                    "segment": conversation_state.get("segment", ""),
+                    "agent_action": agent_action,
+                    "candidate_count": candidate_count,
+                    "explicit_constraints": filter_bundle.get("explicit", {}),
+                    "hard_filters": filter_bundle.get("hard", {}),
+                    "required_constraints": filter_bundle.get("required", {}),
+                    "soft_preferences": filter_bundle.get("soft", {}),
+                },
+            )
+
+        chocolate_by_id = {}
+        for product in chocolates:
+            pid = product.get("id")
+            if pid is None:
+                continue
+            try:
+                chocolate_by_id[int(pid)] = product
+            except (TypeError, ValueError):
+                continue
+
+        def run_retrieval(search_text: str, top_k: int = 5):
+            retrieval_query = build_agentic_retrieval_query(search_text, conversation_state)
+            active_filters = build_agentic_filters(conversation_state)
+            result = recommender.recommend(
+                retrieval_query,
+                top_k=top_k,
+                segment=conversation_state.get("segment"),
+                state=conversation_state,
+                hard_filters=active_filters.get("hard"),
+            )
+            ranked_ids = result.get("ranked", [])
+            products_out = [
+                chocolate_by_id[pid]
+                for pid in ranked_ids
+                if pid in chocolate_by_id
+            ]
+            return retrieval_query, result, products_out
+
+        if fallback_mode == "TASTING_FLIGHT":
+            _, result, candidates = run_retrieval("tasting flight chocolate profiles", top_k=30)
+            flight_ids = recommender.build_tasting_flight(result.get("ranked", []), size=3)
+            flight_products = [chocolate_by_id[pid] for pid in flight_ids if pid in chocolate_by_id]
+            prompt_text, direction_options = _build_tasting_flight_prompt(flight_products)
+            shown_ids = _read_shown_product_ids(conversation_state) + _extract_product_ids(flight_products)
+            conversation_state = _write_shown_product_ids(conversation_state, shown_ids)
+            return ChatResponse(
+                response_text=prompt_text,
+                products=flight_products,
+                intent_detected="tasting_flight",
+                followup_questions=["Which direction should I focus on next?"],
+                answer_options=direction_options,
+                conversation_state=conversation_state,
+                debug_info={
+                    "router_score": "hidden",
+                    "segment": conversation_state.get("segment", ""),
+                    "fallback_mode": "TASTING_FLIGHT",
+                },
+            )
         
         # --- LANGUAGE DETECTION (Dynamic) ---
         user_lang = "English"
@@ -214,70 +467,158 @@ async def chat_endpoint(request: ChatRequest):
         lang_instruction = f"SYSTEM: The user is currently speaking {user_lang}. You MUST respond in {user_lang}."
 
         intent = router.detect_intent(user_input)
+        # While we are in an active clarification journey, short answers like
+        # "yes/no/vegan" should continue the retrieval flow, not generic chat.
+        if get_clarification_turns(conversation_state) > 0 and intent == "chat":
+            intent = "search"
+        more_recs_requested = _is_more_recommendations_request(user_input)
         logger.info(f"Input: '{user_input}' | Language: {user_lang} | Intent: {intent}")
         
         response_text = ""
         products = []
+        latest_explanation_layer: Dict[str, Any] = {}
+        final_answer_options: List[str] = []
         
-        # 2. Execute Logic
+        # 3. Execute Logic
         if intent == "chat":
-            # Pure conversation - NO product context passed initially
-            # Inject language instruction
             response_text = explainer.chat(history_dicts, context_data=lang_instruction)
             
             # SELF-CORRECTION: Did the LLM realize it needs to search?
             if "[SEARCH:" in response_text:
-                import re
                 match = re.search(r"\[SEARCH: (.*?)\]", response_text)
                 if match:
-                    search_query = build_retrieval_query(match.group(1), conversation_state)
+                    search_query = match.group(1)
                     logger.info(f"LLM Triggered Search: '{search_query}'")
-                    result = recommender.recommend(
-                        search_query,
-                        top_k=5,
-                        segment=conversation_state.get("segment"),
-                        state=conversation_state,
-                    )
-                    ranked_ids = result.get("ranked", [])
-                    products = [p for p in chocolates if p["id"] in ranked_ids]
+                    retrieval_query, result, products = run_retrieval(search_query)
+                    latest_explanation_layer = result.get("explanation_layer", {}) if isinstance(result, dict) else {}
                     
                     if not products:
-                        response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{search_query}' returned zero results.")
+                        response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                     else:
-                        list_items = [f"{i}. **{p.get('name')}** ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
-                        context_str = f"{lang_instruction}\nDATABASE RESULTS:\n" + "\n".join(list_items)
+                        if _low_retrieval_confidence(result):
+                            retry_decision = agent_step(
+                                user_input,
+                                conversation_state,
+                                max(81, len(result.get("candidates", []))),
+                                total_catalog_count=len(chocolates),
+                            )
+                            retry_question = str(retry_decision.get("question", "")).strip()
+                            retry_options = [
+                                str(option).strip()
+                                for option in retry_decision.get("answer_options", [])
+                                if str(option).strip()
+                            ]
+                            if retry_decision.get("action") in {"ASK", "FILTER"} and retry_question:
+                                conversation_state = normalize_state(retry_decision.get("updated_state", conversation_state))
+                                return ChatResponse(
+                                    response_text=retry_question,
+                                    products=[],
+                                    intent_detected="clarification",
+                                    followup_questions=[retry_question],
+                                    answer_options=retry_options,
+                                    conversation_state=conversation_state,
+                                    debug_info={
+                                        "router_score": "hidden",
+                                        "segment": conversation_state.get("segment", ""),
+                                        "confidence_retry": True,
+                                        "max_similarity": result.get("max_similarity", 0.0),
+                                        "similarity_variance": result.get("similarity_variance", 0.0),
+                                    },
+                                )
+
+                        list_items = [f"{i}. {p.get('name')} ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
+                        available_n = min(5, len(list_items))
+                        context_str = (
+                            f"{lang_instruction}\n"
+                            f"SYSTEM: Write a concise sommelier recommendation for exactly {available_n} product(s) from the list.\n"
+                            "SYSTEM: Explain why each match fits the user's preferences.\n"
+                            "SYSTEM: Optional: include pairing suggestions.\n"
+                            "SYSTEM: If availability is limited, explicitly say so and do not invent extra products.\n"
+                            "DATABASE RESULTS:\n"
+                            + "\n".join(list_items[:5])
+                        )
                         explanation = explainer.chat(history_dicts, context_data=context_str)
-                        response_text = f"I found **{len(products)}** chocolates for you:\n\n" + "\n".join(list_items) + "\n\n" + explanation
+                        response_text = explanation
                     intent = "search_fallback"
 
         elif intent in ["search", "refine"]:
             current_q = user_input
-            # Context-aware refinement (ELITE OPERATOR UPGRADE)
             last_q = next((msg.content for msg in reversed(request.history) if msg.role == "user" and msg.content != user_input), None)
             if last_q and (len(user_input.split()) < 5 or any(k in user_input.lower() for k in ["more", "else", "other", "another", "instead", "under", "above"])):
                 if not any(word in user_input.lower() for word in last_q.lower().split() if len(word) > 3):
                     current_q = last_q + " " + user_input
                     logger.info(f"Refining Search Context: '{current_q}'")
-            
-            retrieval_query = build_retrieval_query(current_q, conversation_state)
-            result = recommender.recommend(
-                retrieval_query,
-                top_k=5,
-                segment=conversation_state.get("segment"),
-                state=conversation_state,
-            )
-            ranked_ids = result.get("ranked", [])
-            products = [p for p in chocolates if p["id"] in ranked_ids]
+
+            retrieval_top_k = 25 if more_recs_requested else 5
+            retrieval_query, result, products = run_retrieval(current_q, top_k=retrieval_top_k)
+            latest_explanation_layer = result.get("explanation_layer", {}) if isinstance(result, dict) else {}
+
+            if products:
+                seen_ids = _read_shown_product_ids(conversation_state)
+                seen_ids.extend(_extract_product_ids(request.last_ranked_products))
+                if more_recs_requested:
+                    products = _filter_unseen_products(products, seen_ids, limit=5)
+                    if not products:
+                        response_text = (
+                            "I have already shown the closest unique matches for your current criteria. "
+                            "Would you like me to broaden one filter (certification, dietary, cocoa intensity, or budget)?"
+                        )
+                        return ChatResponse(
+                            response_text=response_text,
+                            products=[],
+                            intent_detected="clarification",
+                            followup_questions=[
+                                "Would you like me to broaden one filter (certification, dietary, cocoa intensity, or budget)?"
+                            ],
+                            answer_options=["Broaden certification", "Broaden dietary", "Broaden cocoa intensity", "Broaden budget"],
+                            conversation_state=conversation_state,
+                            debug_info={
+                                "router_score": "hidden",
+                                "segment": conversation_state.get("segment", ""),
+                                "no_repeat_candidates_exhausted": True,
+                            },
+                        )
+                shown_ids_updated = seen_ids + _extract_product_ids(products)
+                conversation_state = _write_shown_product_ids(conversation_state, shown_ids_updated)
             
             if not products:
                 response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                 if not response_text.strip():
                     response_text = "I am sorry, but I could not find any chocolates that match your search criteria. Would you like to try a different search?"
             else:
-                # Build rich, structured context for the LLM
+                if _low_retrieval_confidence(result):
+                    retry_decision = agent_step(
+                        user_input,
+                        conversation_state,
+                        max(81, len(result.get("candidates", []))),
+                        total_catalog_count=len(chocolates),
+                    )
+                    retry_question = str(retry_decision.get("question", "")).strip()
+                    retry_options = [
+                        str(option).strip()
+                        for option in retry_decision.get("answer_options", [])
+                        if str(option).strip()
+                    ]
+                    if retry_decision.get("action") in {"ASK", "FILTER"} and retry_question:
+                        conversation_state = normalize_state(retry_decision.get("updated_state", conversation_state))
+                        return ChatResponse(
+                            response_text=retry_question,
+                            products=[],
+                            intent_detected="clarification",
+                            followup_questions=[retry_question],
+                            answer_options=retry_options,
+                            conversation_state=conversation_state,
+                            debug_info={
+                                "router_score": "hidden",
+                                "segment": conversation_state.get("segment", ""),
+                                "confidence_retry": True,
+                                "max_similarity": result.get("max_similarity", 0.0),
+                                "similarity_variance": result.get("similarity_variance", 0.0),
+                            },
+                        )
+
                 list_items = []
                 for i, p in enumerate(products, 1):
-                    # YAML-like structure is much harder for the LLM to hallucinate over
                     item_str = f"- ITEM_ID: {i}\n"
                     item_str += f"  BRAND: {p.get('brand', 'N/A')}\n"
                     item_str += f"  NAME: {p.get('name', 'N/A')}\n"
@@ -290,39 +631,34 @@ async def chat_endpoint(request: ChatRequest):
                 
                 is_vague = len(user_input.split()) < 4 and not any(k in q_low for k in ["under", "above", "percent", "%"])
                 
+                available_n = min(5, len(list_items))
                 system_note = f"{lang_instruction}\nSYSTEM: ONLY recommend from the list below.\n"
-                if is_vague:
-                    system_note += "SYSTEM: User request is vague. Recommend ONLY 2 items and ask a discovery question.\n"
+                if more_recs_requested:
+                    system_note += "SYSTEM: User asked for another recommendation. Do not repeat previously shown products.\n"
+                    system_note += f"SYSTEM: Recommend exactly {available_n} NEW option(s) only.\n"
+                elif is_vague:
+                    system_note += f"SYSTEM: User request is vague. Recommend up to {available_n} item(s) and ask one concise discovery question.\n"
+                else:
+                    system_note += f"SYSTEM: Recommend exactly {available_n} product(s) in refined sommelier tone with short WHY lines.\n"
+                system_note += "SYSTEM: If only one product is available, clearly say only one match exists. Do not fabricate additional options.\n"
                 
                 context_str = system_note + "DATABASE RESULTS:\n" + "\n".join(list_items)
                 explanation = explainer.chat(history_dicts, context_data=context_str)
-                
-                response_text = f"I found **{len(products)}** chocolates for you:\n\n" + explanation
+                response_text = explanation
 
         elif intent == "reference":
             if not request.last_ranked_products:
-                # ELITE OPERATOR SILENT RECOVERY:
-                # If we think it's a reference but have no list, treat it as a SEARCH.
-                # This prevents the "I don't have a list" error message.
                 logger.info(f"Reference intent detected but no context. Falling back to Search for: '{user_input}'")
                 intent = "search"
-                # Proceed to search logic below
-                retrieval_query = build_retrieval_query(user_input, conversation_state)
-                result = recommender.recommend(
-                    retrieval_query,
-                    top_k=5,
-                    segment=conversation_state.get("segment"),
-                    state=conversation_state,
-                )
-                ranked_ids = result.get("ranked", [])
-                products = [p for p in chocolates if p["id"] in ranked_ids]
+                retrieval_query, result, products = run_retrieval(user_input)
+                latest_explanation_layer = result.get("explanation_layer", {}) if isinstance(result, dict) else {}
                 if not products:
                     response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                 else:
-                    list_items = [f"{i}. **{p.get('name')}** ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
+                    list_items = [f"{i}. {p.get('name')} ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
                     context_str = f"{lang_instruction}\nDATABASE RESULTS:\n" + "\n".join(list_items)
                     explanation = explainer.chat(history_dicts, context_data=context_str)
-                    response_text = f"I found **{len(products)}** chocolates for you:\n\n" + explanation
+                    response_text = explanation
             else:
                 fact_text, idx = resolve_reference(user_input, request.last_ranked_products)
                 response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nFACTUAL ANSWER: {fact_text}")
@@ -332,19 +668,39 @@ async def chat_endpoint(request: ChatRequest):
             response_text = explainer.chat(history_dicts, context_data=lang_instruction)
 
         # FINAL SANITIZATION: Strip internal tokens
-        import re
         response_text = re.sub(r"\[SEARCH:.*?\]", "", response_text).strip()
+
+        # If products are available, do not allow contradictory "no match" narratives.
+        if products and (_contradicts_available_results(response_text) or not response_text.strip()):
+            response_text = _fallback_sommelier_recommendation(products)
+
+        if products and latest_explanation_layer:
+            layer_text = _format_explanation_layer(latest_explanation_layer)
+            if layer_text and "Matched preferences:" not in response_text:
+                response_text = f"{response_text}\n\n{layer_text}".strip()
 
         if not response_text:
             response_text = "I am having trouble finding the right words (or chocolates) at the moment. Could you rephrase that?"
+
+        if products:
+            cumulative_ids = _read_shown_product_ids(conversation_state)
+            cumulative_ids.extend(_extract_product_ids(products))
+            conversation_state = _write_shown_product_ids(conversation_state, cumulative_ids)
 
         return ChatResponse(
             response_text=response_text,
             products=products,
             intent_detected=intent,
             followup_questions=[],
+            answer_options=final_answer_options,
             conversation_state=conversation_state,
-            debug_info={"router_score": "hidden", "segment": conversation_state.get("segment", "")}
+            debug_info={
+                "router_score": "hidden",
+                "segment": conversation_state.get("segment", ""),
+                "agent_action": locals().get("agent_action"),
+                "candidate_count": locals().get("candidate_count"),
+                "probe_query": locals().get("probe_query"),
+            },
         )
 
     except Exception as e:
@@ -355,6 +711,7 @@ async def chat_endpoint(request: ChatRequest):
             products=[],
             intent_detected="error",
             followup_questions=[],
+            answer_options=[],
             conversation_state=locals().get("conversation_state", normalize_state({})),
             debug_info={"error": str(e)}
         )

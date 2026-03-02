@@ -1,6 +1,7 @@
 import json
 import os
 from pathlib import Path
+from typing import List, Tuple
 
 import numpy as np
 import psycopg2
@@ -42,42 +43,72 @@ class ChannelBService:
                 self.id_to_maker_country = {}
 
     def rank(self, candidate_ids: list[int], semantic_query: str, top_k: int, min_score: float = 0.35) -> list[int]:
+        scored = self.rank_with_scores(candidate_ids, semantic_query, top_k, min_score)
+        return [pid for pid, _ in scored]
+
+    def rank_with_scores(
+        self,
+        candidate_ids: list[int],
+        semantic_query: str,
+        top_k: int,
+        min_score: float = 0.35,
+    ) -> List[Tuple[int, float]]:
         if not candidate_ids:
             return []
-
         if self.db_url:
-            return self._rank_sql(candidate_ids, semantic_query, top_k, min_score)
-        else:
-            return self._rank_json(candidate_ids, semantic_query, top_k, min_score)
+            return self._rank_sql_scores(candidate_ids, semantic_query, top_k, min_score)
+        return self._rank_json_scores(candidate_ids, semantic_query, top_k, min_score)
 
     def _rank_sql(self, candidate_ids: list[int], semantic_query: str, top_k: int, min_score: float) -> list[int]:
-        """Vector search using pgvector."""
+        return [pid for pid, _ in self._rank_sql_scores(candidate_ids, semantic_query, top_k, min_score)]
+
+    def _rank_json(self, candidate_ids: list[int], semantic_query: str, top_k: int, min_score: float) -> list[int]:
+        return [pid for pid, _ in self._rank_json_scores(candidate_ids, semantic_query, top_k, min_score)]
+
+    def _rank_sql_scores(
+        self,
+        candidate_ids: list[int],
+        semantic_query: str,
+        top_k: int,
+        min_score: float,
+    ) -> List[Tuple[int, float]]:
+        """Vector search using pgvector, returning (id, similarity score)."""
+        if not semantic_query.strip():
+            return [(pid, 1.0) for pid in candidate_ids[:top_k]]
         try:
             query_vec = self.model.encode(semantic_query, normalize_embeddings=True).tolist()
-            
+
             conn = psycopg2.connect(self.db_url)
             cur = conn.cursor()
-            
-            # Use cosine similarity <=> 1 - (vec1 . vec2)
-            # score = 1 - (query_vec <=> embedding)
-            cur.execute("""
+
+            # score = cosine similarity
+            cur.execute(
+                """
                 SELECT id, 1 - (embedding <=> %s::vector) as score
                 FROM chocolates
                 WHERE id = ANY(%s)
                 AND (1 - (embedding <=> %s::vector)) >= %s
                 ORDER BY score DESC
                 LIMIT %s;
-            """, (query_vec, candidate_ids, query_vec, min_score, top_k))
-            
-            results = [r[0] for r in cur.fetchall()]
+                """,
+                (query_vec, candidate_ids, query_vec, min_score, top_k),
+            )
+
+            rows = cur.fetchall()
             cur.close()
             conn.close()
-            return results
+            return [(int(row[0]), float(row[1])) for row in rows]
         except Exception as e:
             print(f"SQL Rank Error: {e}")
-            return self._rank_json(candidate_ids, semantic_query, top_k, min_score)
+            return self._rank_json_scores(candidate_ids, semantic_query, top_k, min_score)
 
-    def _rank_json(self, candidate_ids: list[int], semantic_query: str, top_k: int, min_score: float) -> list[int]:
+    def _rank_json_scores(
+        self,
+        candidate_ids: list[int],
+        semantic_query: str,
+        top_k: int,
+        min_score: float,
+    ) -> List[Tuple[int, float]]:
         # maker_country hard filter (Channel B)
         country = normalize_country_from_query(semantic_query)
         if country and hasattr(self, 'id_to_maker_country') and self.id_to_maker_country:
@@ -89,7 +120,7 @@ class ChannelBService:
                 return []
 
         if not semantic_query.strip():
-            return candidate_ids[:top_k]
+            return [(pid, 1.0) for pid in candidate_ids[:top_k]]
 
         query_vec = self.model.encode(semantic_query, normalize_embeddings=True)
 
@@ -104,8 +135,7 @@ class ChannelBService:
             scored.append((pid, score))
 
         scored.sort(key=lambda x: x[1], reverse=True)
-        
-        # Filter by threshold
-        final_results = [pid for pid, score in scored if score >= min_score]
-        
-        return final_results[:top_k]
+
+        # Filter by threshold and keep scores for confidence diagnostics.
+        filtered = [(pid, score) for pid, score in scored if score >= min_score]
+        return filtered[:top_k]

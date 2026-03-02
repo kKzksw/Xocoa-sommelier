@@ -79,6 +79,7 @@ exports.handler = async (event, context) => {
       preferences: {}, // Decoupled: Backend handles logic internally
       debug_intent: backendData.intent_detected,
       followup_questions: backendData.followup_questions || [],
+      answer_options: backendData.answer_options || [],
       conversation_state: backendData.conversation_state || state
     };
 

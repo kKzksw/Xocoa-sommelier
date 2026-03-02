@@ -94,6 +94,74 @@ class LLMExplainer:
                     continue
                 return f"I'm having trouble thinking right now. ({str(e)})"
 
+    def structured_ambiguity_check(
+        self,
+        user_message: str,
+        state: Dict[str, str],
+        fallback_missing_fields: List[str],
+    ) -> Dict[str, Any]:
+        """
+        Groq helper used only for ambiguity checks.
+        Expected JSON response:
+        {
+          "needs_more_info": bool,
+          "missing_fields": list[str]
+        }
+        """
+        fallback = {
+            "needs_more_info": bool(fallback_missing_fields),
+            "missing_fields": fallback_missing_fields,
+        }
+        if not self.client:
+            return fallback
+
+        allowed_fields = [
+            "chocolate_type",
+            "flavor_direction",
+            "intensity",
+            "budget",
+            "certification",
+            "dietary",
+            "cocoa_percentage",
+            "brand_preference",
+            "context",
+        ]
+        prompt = (
+            "You are a JSON-only classifier for a chocolate recommendation assistant.\n"
+            "Return strict JSON only with keys: needs_more_info (bool), missing_fields (list[str]).\n"
+            "Use missing_fields only from the allowed list.\n"
+            f"Allowed fields: {allowed_fields}\n"
+            f"Current state: {json.dumps(state, ensure_ascii=True)}\n"
+            f"Fallback missing fields: {json.dumps(fallback_missing_fields, ensure_ascii=True)}\n"
+            f"User message: {user_message}\n"
+        )
+
+        try:
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "Return only valid JSON. No markdown."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.0,
+                max_tokens=180,
+                response_format={"type": "json_object"},
+            )
+            text = response.choices[0].message.content or "{}"
+            data = json.loads(text)
+            needs = bool(data.get("needs_more_info"))
+            missing = data.get("missing_fields", [])
+            if not isinstance(missing, list):
+                missing = []
+            cleaned = [f for f in missing if isinstance(f, str) and f in allowed_fields]
+            return {
+                "needs_more_info": needs,
+                "missing_fields": cleaned,
+            }
+        except Exception:
+            # Any schema/model failure falls back to deterministic policy.
+            return fallback
+
     def explain(self, query: str, products: List[Dict]) -> str:
         """Legacy explanation method (wraps chat)"""
         context = "DATABASE RESULTS:\n"

@@ -52,6 +52,7 @@ export default async function handler(req, res) {
       preferences: {},
       intent: data.intent_detected,
       followup_questions: data.followup_questions || [],
+      answer_options: data.answer_options || [],
       conversation_state: data.conversation_state || state
     }
 

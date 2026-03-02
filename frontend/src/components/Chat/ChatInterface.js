@@ -4,6 +4,7 @@ import FixedChatInput from './FixedChatInput'
 import ChocolateRecommendations from '../Recommendations/ChocolateRecommendations'
 
 export default function ChatInterface() {
+  const SEGMENT_PROMPT_HEADER = 'When choosing chocolate, what matters most to you?'
   const SEGMENT_OPTIONS = [
     { key: 'A', label: 'Taste & flavor experience' },
     { key: 'B', label: 'Health & ethical sourcing' },
@@ -23,6 +24,8 @@ export default function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false)
   const [userPreferences, setUserPreferences] = useState({})
   const [conversationState, setConversationState] = useState({})
+  const [showSegmentOptions, setShowSegmentOptions] = useState(false)
+  const [answerOptions, setAnswerOptions] = useState([])
   const messagesEndRef = useRef(null)
 
   const scrollToBottom = () => {
@@ -44,6 +47,8 @@ export default function ChatInterface() {
     const nextMessages = [...messages, userMessage]
     setMessages(nextMessages)
     setIsLoading(true)
+    setShowSegmentOptions(false)
+    setAnswerOptions([])
 
     try {
       const response = await fetch('/api/chat', {
@@ -78,6 +83,25 @@ export default function ChatInterface() {
 
       setMessages(prev => [...prev, assistantMessage])
       setConversationState(prev => result.conversation_state || prev)
+      const hasSegment = Boolean(result.conversation_state && result.conversation_state.segment)
+      const detectedIntent = result.intent || result.debug_intent || ''
+      const normalizedAnswerOptions = Array.isArray(result.answer_options)
+        ? result.answer_options
+            .map(option => String(option || '').trim())
+            .filter(Boolean)
+        : []
+      const hasABCSegmentOptions = ['A', 'B', 'C'].every(key =>
+        normalizedAnswerOptions.some(option => option.toUpperCase() === key)
+      )
+      const isSegmentPrompt = assistantContent.trim().startsWith(SEGMENT_PROMPT_HEADER)
+      const shouldShowSegmentOptions =
+        !hasSegment && (
+          hasABCSegmentOptions ||
+          (detectedIntent === 'segment_selection' && isSegmentPrompt)
+        )
+
+      setShowSegmentOptions(shouldShowSegmentOptions)
+      setAnswerOptions(shouldShowSegmentOptions ? [] : normalizedAnswerOptions)
 
       if (result.preferences) {
         setUserPreferences(prev => ({ ...prev, ...result.preferences }))
@@ -101,7 +125,14 @@ export default function ChatInterface() {
 
   const handleSegmentSelection = async (segmentKey) => {
     if (isLoading) return
+    setShowSegmentOptions(false)
     await handleSendMessage(segmentKey)
+  }
+
+  const handleAnswerOptionSelection = async (option) => {
+    if (isLoading) return
+    setAnswerOptions([])
+    await handleSendMessage(option)
   }
 
   return (
@@ -121,7 +152,7 @@ export default function ChatInterface() {
           />
         ))}
 
-        {!conversationState.segment && (
+        {showSegmentOptions && !conversationState.segment && (
           <div style={{
             display: 'flex',
             flexWrap: 'wrap',
@@ -147,6 +178,37 @@ export default function ChatInterface() {
                 }}
               >
                 {option.key}) {option.label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {!showSegmentOptions && answerOptions.length > 0 && (
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '0.5rem',
+            margin: '0 2rem 1rem'
+          }}>
+            {answerOptions.map((option, idx) => (
+              <button
+                key={`${option}-${idx}`}
+                type="button"
+                disabled={isLoading}
+                onClick={() => handleAnswerOptionSelection(option)}
+                style={{
+                  border: '1px solid var(--color-primary)',
+                  background: '#fff',
+                  color: 'var(--color-primary)',
+                  borderRadius: '999px',
+                  padding: '0.5rem 0.9rem',
+                  fontFamily: 'var(--font-body)',
+                  fontSize: 'var(--text-sm)',
+                  cursor: isLoading ? 'not-allowed' : 'pointer',
+                  opacity: isLoading ? 0.65 : 1
+                }}
+              >
+                {option}
               </button>
             ))}
           </div>
