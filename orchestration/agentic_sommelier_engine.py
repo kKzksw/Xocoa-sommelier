@@ -44,6 +44,7 @@ INTERNAL_FIELDS = [
     "_ambiguous_turns",
     "_asked_fields",
     "_last_asked_field",
+    "_last_display_candidate_count",
     "_shown_product_ids",
     "_explicit_hard_fields",
     "_agent_trace",

@@ -356,21 +356,24 @@ async def chat_endpoint(request: ChatRequest):
         decision = agent_runtime["decision"]
         conversation_state = agent_runtime["conversation_state"]
         candidate_count = agent_runtime["candidate_count"]
+        display_candidate_count = agent_runtime.get("display_candidate_count", candidate_count)
         probe_query = agent_runtime["probe_query"]
         filter_bundle = agent_runtime["filter_bundle"]
         agent_action = str(decision.get("action", "RETRIEVE"))
         agent_question = str(decision.get("question", "")).strip()
         agent_answer_options = list(decision.get("answer_options", []))
+        preliminary_products = list(decision.get("preliminary_products", []))
+        preliminary_evidence = list(decision.get("preliminary_evidence", []))
         fallback_mode = str(decision.get("fallback_mode", "")).strip()
         if is_question_action(agent_action) and agent_question:
             is_segment_prompt = agent_question.strip() == SEGMENT_SELECTION_PROMPT.strip()
             return ChatResponse(
                 response_text=agent_question,
-                products=[],
+                products=[] if is_segment_prompt else preliminary_products,
                 intent_detected="segment_selection" if is_segment_prompt else "clarification",
                 followup_questions=[agent_question],
                 answer_options=agent_answer_options,
-                evidence=[],
+                evidence=[] if is_segment_prompt else preliminary_evidence,
                 agent_trace=read_agent_trace(conversation_state),
                 conversation_state=conversation_state,
                 debug_info={
@@ -378,10 +381,12 @@ async def chat_endpoint(request: ChatRequest):
                     "segment": conversation_state.get("segment", ""),
                     "agent_action": agent_action,
                     "candidate_count": candidate_count,
+                    "display_candidate_count": display_candidate_count,
                     "explicit_constraints": filter_bundle.get("explicit", {}),
                     "hard_filters": filter_bundle.get("hard", {}),
                     "required_constraints": filter_bundle.get("required", {}),
                     "soft_preferences": filter_bundle.get("soft", {}),
+                    "preliminary_count": 0 if is_segment_prompt else len(preliminary_products),
                 },
             )
 
@@ -691,6 +696,7 @@ async def chat_endpoint(request: ChatRequest):
                 "verify_metrics": latest_verification.get("metrics", {}),
                 "evidence_preview": latest_verification.get("evidence", []),
                 "candidate_count": locals().get("candidate_count"),
+                "display_candidate_count": locals().get("display_candidate_count"),
                 "probe_query": locals().get("probe_query"),
             },
         )
