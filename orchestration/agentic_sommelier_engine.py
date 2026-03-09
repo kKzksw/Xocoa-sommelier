@@ -6,6 +6,7 @@ LLM support is optional and only used for structured ambiguity checks.
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Callable, Dict, List, Optional, Set
 
@@ -45,6 +46,7 @@ INTERNAL_FIELDS = [
     "_last_asked_field",
     "_shown_product_ids",
     "_explicit_hard_fields",
+    "_agent_trace",
 ]
 
 SEGMENT_REQUIRED_FIELDS = {
@@ -96,6 +98,7 @@ MAX_CLARIFICATION_QUESTIONS = 5
 MIN_DYNAMIC_RETRIEVE_THRESHOLD = 5
 CATALOG_RETRIEVE_RATIO = 0.25
 EARLY_DIRECT_RETRIEVE_THRESHOLD = 8
+BROAD_NARROWING_MIN_CANDIDATES = 120
 
 # Constraint priorities:
 # 1) Explicit constraints from user messages
@@ -146,6 +149,13 @@ AMBIGUOUS_ANY_PATTERNS = [
 _AMBIGUITY_HELPER: Optional[
     Callable[[str, Dict[str, str], List[str]], Dict[str, object]]
 ] = None
+
+
+def _segment_mode() -> str:
+    mode = (os.getenv("SEGMENT_MODE", "free_text") or "").strip().lower()
+    if mode in {"clickbox", "click_box", "click-box"}:
+        return "clickbox"
+    return "free_text"
 
 
 def set_ambiguity_helper(
@@ -470,29 +480,67 @@ def agent_step(
                 "updated_state": updated_state,
             }
 
-    # Mandatory first step: segment must be selected via click-box before retrieval.
-    # To prevent dead loops, if this prompt was already asked and still unresolved,
-    # infer a best-effort segment from current constraints and continue.
+    # Segment handling:
+    # - free_text mode (default): infer segment silently from message/state.
+    # - clickbox mode: ask explicit A/B/C prompt first.
     if segment not in SEGMENT_REQUIRED_FIELDS:
-        if "segment" in _asked_fields(updated_state) and (user_message or "").strip():
-            inferred_segment = _infer_segment_from_state(updated_state)
-            if inferred_segment:
-                updated_state["segment"] = inferred_segment
-                segment = inferred_segment
+        if _segment_mode() == "clickbox":
+            # To prevent dead loops, if this prompt was already asked and still
+            # unresolved, infer a best-effort segment and continue.
+            if "segment" in _asked_fields(updated_state) and (user_message or "").strip():
+                inferred_segment = _infer_segment_from_state(updated_state) or _infer_segment_from_message(user_message)
+                if inferred_segment:
+                    updated_state["segment"] = inferred_segment
+                    segment = inferred_segment
+                else:
+                    updated_state["segment"] = "Impulsive-Involved"
+                    segment = "Impulsive-Involved"
+                filters = build_agentic_filters(updated_state)
+                missing_required = compute_missing_required_fields(updated_state)
+                missing_optional = _apply_ambiguity_helper(
+                    user_message,
+                    updated_state,
+                    _missing_optional_fields(segment, updated_state),
+                )
             else:
-                updated_state["segment"] = "Impulsive-Involved"
-                segment = "Impulsive-Involved"
+                updated_state = _record_asked_field(updated_state, "segment", increment_turn=False)
+                return {
+                    "action": "ASK",
+                    "question": SEGMENT_SELECTION_PROMPT,
+                    "answer_options": ["A", "B", "C"],
+                    "filters": filters,
+                    "updated_state": updated_state,
+                }
+        else:
+            inferred_segment = _infer_segment_from_state(updated_state) or _infer_segment_from_message(user_message)
+            updated_state["segment"] = inferred_segment or "Impulsive-Involved"
+            segment = updated_state["segment"]
             filters = build_agentic_filters(updated_state)
             missing_required = compute_missing_required_fields(updated_state)
-        else:
-            updated_state = _record_asked_field(updated_state, "segment", increment_turn=False)
-            return {
-                "action": "ASK",
-                "question": SEGMENT_SELECTION_PROMPT,
-                "answer_options": ["A", "B", "C"],
-                "filters": filters,
-                "updated_state": updated_state,
-            }
+            missing_optional = _apply_ambiguity_helper(
+                user_message,
+                updated_state,
+                _missing_optional_fields(segment, updated_state),
+            )
+
+    # In free-text mode, start with a richer open-ended narrowing question when
+    # the scope is still broad. This feels closer to a human sommelier intake.
+    asked_fields = _asked_fields(updated_state)
+    if (
+        _segment_mode() == "free_text"
+        and clarification_turns == 0
+        and not missing_required
+        and candidate_count >= max(retrieve_threshold + 1, BROAD_NARROWING_MIN_CANDIDATES)
+        and "broad_narrowing" not in asked_fields
+    ):
+        updated_state = _record_question(updated_state, "broad_narrowing")
+        return {
+            "action": "ASK",
+            "question": _build_broad_narrowing_question(segment, candidate_count, updated_state),
+            "answer_options": [],
+            "filters": filters,
+            "updated_state": updated_state,
+        }
 
     # Ambiguity handling: first ambiguous answer keeps narrowing by asking one
     # more concrete question; repeated ambiguity falls back to tasting flight.
@@ -517,6 +565,21 @@ def agent_step(
                 "updated_state": updated_state,
                 "fallback_mode": "TASTING_FLIGHT",
             }
+
+    # If user explicitly asks for recommendations after at least one
+    # clarification turn, proceed to retrieval with current constraints.
+    if (
+        _is_direct_recommendation_request(user_message)
+        and clarification_turns >= 1
+        and _has_any_constraints(filters)
+    ):
+        return {
+            "action": "RETRIEVE",
+            "question": "",
+            "answer_options": [],
+            "filters": filters,
+            "updated_state": updated_state,
+        }
 
     # Stop rules based on database narrowing quality:
     # - retrieve when candidate scope is already narrow enough
@@ -763,11 +826,11 @@ def _query_phrase_for_constraint(field: str, value: str) -> str:
 
 
 def _extract_chocolate_type(lower: str) -> str:
-    if re.search(r"\bdark\b", lower):
+    if re.search(r"\b(dark|noir)\b", lower):
         return "dark"
-    if re.search(r"\bmilk\b", lower):
+    if re.search(r"\b(milk|lait)\b", lower):
         return "milk"
-    if re.search(r"\bwhite\b", lower):
+    if re.search(r"\b(white|blanc)\b", lower):
         return "white"
     return ""
 
@@ -901,15 +964,15 @@ def _extract_origin_scope(lower: str) -> str:
 
 def _extract_flavor_direction(lower: str) -> str:
     flavors = []
-    if any(k in lower for k in ["sweet", "honey", "toffee"]):
+    if any(k in lower for k in ["sweet", "sucre", "honey", "toffee"]):
         flavors.append("sweet")
-    if any(k in lower for k in ["fruity", "fruit", "berry", "citrus"]):
+    if any(k in lower for k in ["fruity", "fruit", "fruité", "berry", "citrus", "fig", "figue", "abricot", "raisin"]):
         flavors.append("fruity")
-    if any(k in lower for k in ["nutty", "nut", "hazelnut", "almond"]):
+    if any(k in lower for k in ["nutty", "nut", "hazelnut", "almond", "noisette", "amande"]):
         flavors.append("nutty")
     if "caramel" in lower:
         flavors.append("caramel")
-    if any(k in lower for k in ["spicy", "chili", "pepper", "cinnamon"]):
+    if any(k in lower for k in ["spicy", "epice", "épice", "chili", "pepper", "cinnamon"]):
         flavors.append("spicy")
     if "dark" in lower and "dark" not in flavors:
         flavors.append("dark")
@@ -920,9 +983,9 @@ def _extract_flavor_direction(lower: str) -> str:
 
 
 def _extract_intensity(lower: str) -> str:
-    if any(k in lower for k in ["intense", "strong", "bold", "high intensity"]):
+    if any(k in lower for k in ["intense", "fort", "strong", "bold", "high intensity"]):
         return "intense"
-    if any(k in lower for k in ["smooth", "creamy", "mild", "soft"]):
+    if any(k in lower for k in ["smooth", "creamy", "mild", "soft", "doux", "onctueux"]):
         return "smooth"
     return ""
 
@@ -1141,6 +1204,56 @@ def _apply_unresolved_required_fallback(state: Dict[str, str], field: str) -> Di
     return updated
 
 
+def _build_broad_narrowing_question(segment: str, candidate_count: int, state: Dict[str, str]) -> str:
+    intro = (
+        f"I currently see about {candidate_count} relevant options. "
+        "To narrow quickly, tell me one or two priorities:"
+    )
+    if segment == "Rational Health-Conscious":
+        points = [
+            "- Certification priorities (organic, fair trade, sustainability)",
+            "- Dietary needs (vegan, low sugar, dairy-free)",
+            "- Cocoa level (for example 70%+ or smoother style)",
+            "- Budget or gift context",
+        ]
+    elif segment == "Uninvolved":
+        points = [
+            "- Budget range",
+            "- Familiar brands vs discovering new ones",
+            "- Chocolate type (dark, milk, white)",
+            "- Everyday treat or gift",
+        ]
+    else:
+        points = [
+            "- Flavor direction (fruity, nutty, caramel, spicy, floral)",
+            "- Intensity (bold vs smooth)",
+            "- Origin preference (maker country or bean origin)",
+            "- Budget or gift context",
+        ]
+    return intro + "\n" + "\n".join(points)
+
+
+def _is_direct_recommendation_request(user_message: str) -> bool:
+    lower = (user_message or "").strip().lower()
+    if not lower:
+        return False
+    return bool(
+        re.search(
+            r"\b(recommend|recommendation|recommande|recommandation|suggest|suggere|suggère|conseille|propose|show me|give me|pick for me)\b",
+            lower,
+        )
+        or lower in {"recommend", "suggest", "show options", "give me options", "recommande", "propose"}
+    )
+
+
+def _has_any_constraints(filters: Dict[str, dict]) -> bool:
+    for bucket in ("explicit", "hard", "soft", "required"):
+        data = filters.get(bucket, {})
+        if isinstance(data, dict) and any(str(v).strip() for v in data.values()):
+            return True
+    return False
+
+
 def _infer_segment_from_state(state: Dict[str, str]) -> str:
     # Best-effort segment inference to avoid repeated segment prompts.
     if _has_value(state.get("certification", "")) or _has_value(state.get("dietary", "")):
@@ -1154,6 +1267,42 @@ def _infer_segment_from_state(state: Dict[str, str]) -> str:
     ):
         return "Impulsive-Involved"
     return ""
+
+
+def _infer_segment_from_message(user_message: str) -> str:
+    lower = (user_message or "").strip().lower()
+    if not lower:
+        return ""
+
+    scores = {
+        "Impulsive-Involved": 0,
+        "Rational Health-Conscious": 0,
+        "Uninvolved": 0,
+    }
+
+    for token in ["organic", "fair trade", "fairtrade", "sustainable", "ethical", "vegan", "dietary", "low sugar", "dairy-free", "gluten-free", "healthy"]:
+        if token in lower:
+            scores["Rational Health-Conscious"] += 1
+    for token in ["bio", "equitable", "équitable", "vegan", "vegane", "sain", "sante", "santé"]:
+        if token in lower:
+            scores["Rational Health-Conscious"] += 1
+
+    for token in ["budget", "cheap", "affordable", "value", "familiar brand", "mainstream", "trusted brand", "low cost", "price"]:
+        if token in lower:
+            scores["Uninvolved"] += 1
+    for token in ["prix", "pas cher", "bon rapport qualite", "bon rapport qualité"]:
+        if token in lower:
+            scores["Uninvolved"] += 1
+
+    for token in ["dark", "milk", "white", "flavor", "taste", "fruity", "nutty", "caramel", "spicy", "intense", "smooth", "creamy"]:
+        if token in lower:
+            scores["Impulsive-Involved"] += 1
+    for token in ["noir", "lait", "blanc", "gout", "goût", "fruité", "noisette", "amande", "intense", "doux"]:
+        if token in lower:
+            scores["Impulsive-Involved"] += 1
+
+    best_segment = max(scores, key=scores.get)
+    return best_segment if scores[best_segment] > 0 else ""
 
 
 def _dynamic_retrieve_threshold(total_catalog_count: Optional[int]) -> int:

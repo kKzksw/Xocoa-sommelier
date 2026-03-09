@@ -20,13 +20,17 @@ from orchestration.recommender import RecommenderService
 from orchestration.reference_resolver import resolve_reference
 from orchestration.agentic_sommelier_engine import (
     SEGMENT_SELECTION_PROMPT,
-    agent_step,
     build_agentic_filters,
     build_agentic_retrieval_query,
     get_clarification_turns,
     normalize_state,
     set_ambiguity_helper,
-    update_state_from_message,
+)
+from orchestration.agentic_runtime import (
+    is_question_action,
+    read_agent_trace,
+    run_pre_retrieval_agent_turn,
+    run_post_retrieval_verification,
 )
 
 # -----------------------------------------------------------------------------
@@ -57,6 +61,8 @@ class ChatResponse(BaseModel):
     intent_detected: str
     followup_questions: List[str] = Field(default_factory=list)
     answer_options: List[str] = Field(default_factory=list)
+    evidence: List[Dict[str, Any]] = Field(default_factory=list)
+    agent_trace: List[Dict[str, Any]] = Field(default_factory=list)
     conversation_state: Dict[str, str] = Field(default_factory=dict)
     debug_info: Optional[Dict[str, Any]] = None
 
@@ -64,14 +70,6 @@ class ChatResponse(BaseModel):
 # Global State (Loaded on Startup)
 # -----------------------------------------------------------------------------
 services = {}
-SIMILARITY_CONFIDENCE_MIN = 0.65
-SIMILARITY_VARIANCE_MIN = 0.0008
-
-
-def _low_retrieval_confidence(result: Dict[str, Any]) -> bool:
-    max_similarity = float(result.get("max_similarity", 0.0) or 0.0)
-    variance = float(result.get("similarity_variance", 0.0) or 0.0)
-    return max_similarity < SIMILARITY_CONFIDENCE_MIN or variance < SIMILARITY_VARIANCE_MIN
 
 
 def _contradicts_available_results(text: str) -> bool:
@@ -324,7 +322,6 @@ async def chat_endpoint(request: ChatRequest):
     try:
         user_input = request.message
         conversation_state = normalize_state(request.state)
-        conversation_state = update_state_from_message(user_input, conversation_state)
 
         # Ensure current user turn is always part of LLM history.
         history_dicts = [{"role": m.role, "content": m.content} for m in request.history]
@@ -344,45 +341,28 @@ async def chat_endpoint(request: ChatRequest):
                     logger.info(f"Rehydrating Context from History: found {len(rehydrated)} products.")
                     request.last_ranked_products = rehydrated
 
-        # 1) Agentic decision layer before retrieval.
-        # Explicit constraints from the user message are already merged into state
-        # above, so candidate estimation uses those hard filters before segment Q&A.
+        # 1) Agentic runtime step before retrieval.
         router = services["router"]
         explainer = services["explainer"]
         recommender = services["recommender"]
         chocolates = services["chocolates"]
 
-        filter_bundle = build_agentic_filters(conversation_state)
-        # Probe query for stop-condition should reflect hard constraint narrowing only.
-        # Do not include soft preferences from this turn, otherwise scope appears
-        # artificially small and clarification can stop too early.
-        probe_query = build_agentic_retrieval_query(
-            "",
-            conversation_state,
-            include_soft_preferences=False,
-            include_context=False,
-        )
-        candidate_count = recommender.estimate_candidate_count(
-            probe_query,
-            hard_filters=filter_bundle.get("hard"),
-        )
-
-        decision = agent_step(
+        agent_runtime = run_pre_retrieval_agent_turn(
             user_input,
             conversation_state,
-            candidate_count,
+            recommender=recommender,
             total_catalog_count=len(chocolates),
         )
-        conversation_state = normalize_state(decision.get("updated_state", conversation_state))
+        decision = agent_runtime["decision"]
+        conversation_state = agent_runtime["conversation_state"]
+        candidate_count = agent_runtime["candidate_count"]
+        probe_query = agent_runtime["probe_query"]
+        filter_bundle = agent_runtime["filter_bundle"]
         agent_action = str(decision.get("action", "RETRIEVE"))
         agent_question = str(decision.get("question", "")).strip()
-        agent_answer_options = [
-            str(option).strip()
-            for option in decision.get("answer_options", [])
-            if str(option).strip()
-        ]
+        agent_answer_options = list(decision.get("answer_options", []))
         fallback_mode = str(decision.get("fallback_mode", "")).strip()
-        if agent_action in {"ASK", "FILTER"} and agent_question:
+        if is_question_action(agent_action) and agent_question:
             is_segment_prompt = agent_question.strip() == SEGMENT_SELECTION_PROMPT.strip()
             return ChatResponse(
                 response_text=agent_question,
@@ -390,6 +370,8 @@ async def chat_endpoint(request: ChatRequest):
                 intent_detected="segment_selection" if is_segment_prompt else "clarification",
                 followup_questions=[agent_question],
                 answer_options=agent_answer_options,
+                evidence=[],
+                agent_trace=read_agent_trace(conversation_state),
                 conversation_state=conversation_state,
                 debug_info={
                     "router_score": "hidden",
@@ -444,6 +426,8 @@ async def chat_endpoint(request: ChatRequest):
                 intent_detected="tasting_flight",
                 followup_questions=["Which direction should I focus on next?"],
                 answer_options=direction_options,
+                evidence=[],
+                agent_trace=read_agent_trace(conversation_state),
                 conversation_state=conversation_state,
                 debug_info={
                     "router_score": "hidden",
@@ -477,6 +461,7 @@ async def chat_endpoint(request: ChatRequest):
         response_text = ""
         products = []
         latest_explanation_layer: Dict[str, Any] = {}
+        latest_verification: Dict[str, Any] = {}
         final_answer_options: List[str] = []
         
         # 3. Execute Logic
@@ -491,41 +476,40 @@ async def chat_endpoint(request: ChatRequest):
                     logger.info(f"LLM Triggered Search: '{search_query}'")
                     retrieval_query, result, products = run_retrieval(search_query)
                     latest_explanation_layer = result.get("explanation_layer", {}) if isinstance(result, dict) else {}
+                    verification = run_post_retrieval_verification(
+                        user_message=user_input,
+                        state=conversation_state,
+                        retrieval_result=result,
+                        products=products,
+                        total_catalog_count=len(chocolates),
+                    )
+                    latest_verification = verification
+                    verify_question = str(verification.get("question", "")).strip()
+                    if str(verification.get("action", "")).upper() == "VERIFY" and verify_question:
+                        conversation_state = normalize_state(verification.get("updated_state", conversation_state))
+                        return ChatResponse(
+                            response_text=verify_question,
+                            products=[],
+                            intent_detected="clarification",
+                            followup_questions=[verify_question],
+                            answer_options=list(verification.get("answer_options", [])),
+                            evidence=list(verification.get("evidence", [])),
+                            agent_trace=read_agent_trace(conversation_state),
+                            conversation_state=conversation_state,
+                            debug_info={
+                                "router_score": "hidden",
+                                "segment": conversation_state.get("segment", ""),
+                                "agent_post_action": "VERIFY",
+                                "verify_reason": verification.get("reason", ""),
+                                "verify_metrics": verification.get("metrics", {}),
+                                "evidence_preview": verification.get("evidence", []),
+                            },
+                        )
+                    conversation_state = normalize_state(verification.get("updated_state", conversation_state))
                     
                     if not products:
                         response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                     else:
-                        if _low_retrieval_confidence(result):
-                            retry_decision = agent_step(
-                                user_input,
-                                conversation_state,
-                                max(81, len(result.get("candidates", []))),
-                                total_catalog_count=len(chocolates),
-                            )
-                            retry_question = str(retry_decision.get("question", "")).strip()
-                            retry_options = [
-                                str(option).strip()
-                                for option in retry_decision.get("answer_options", [])
-                                if str(option).strip()
-                            ]
-                            if retry_decision.get("action") in {"ASK", "FILTER"} and retry_question:
-                                conversation_state = normalize_state(retry_decision.get("updated_state", conversation_state))
-                                return ChatResponse(
-                                    response_text=retry_question,
-                                    products=[],
-                                    intent_detected="clarification",
-                                    followup_questions=[retry_question],
-                                    answer_options=retry_options,
-                                    conversation_state=conversation_state,
-                                    debug_info={
-                                        "router_score": "hidden",
-                                        "segment": conversation_state.get("segment", ""),
-                                        "confidence_retry": True,
-                                        "max_similarity": result.get("max_similarity", 0.0),
-                                        "similarity_variance": result.get("similarity_variance", 0.0),
-                                    },
-                                )
-
                         list_items = [f"{i}. {p.get('name')} ({p.get('cocoa_percentage', '?')}% cocoa)" for i, p in enumerate(products, 1)]
                         available_n = min(5, len(list_items))
                         context_str = (
@@ -571,6 +555,8 @@ async def chat_endpoint(request: ChatRequest):
                                 "Would you like me to broaden one filter (certification, dietary, cocoa intensity, or budget)?"
                             ],
                             answer_options=["Broaden certification", "Broaden dietary", "Broaden cocoa intensity", "Broaden budget"],
+                            evidence=[],
+                            agent_trace=read_agent_trace(conversation_state),
                             conversation_state=conversation_state,
                             debug_info={
                                 "router_score": "hidden",
@@ -580,43 +566,43 @@ async def chat_endpoint(request: ChatRequest):
                         )
                 shown_ids_updated = seen_ids + _extract_product_ids(products)
                 conversation_state = _write_shown_product_ids(conversation_state, shown_ids_updated)
+
+            verification = run_post_retrieval_verification(
+                user_message=user_input,
+                state=conversation_state,
+                retrieval_result=result,
+                products=products,
+                total_catalog_count=len(chocolates),
+            )
+            latest_verification = verification
+            verify_question = str(verification.get("question", "")).strip()
+            if str(verification.get("action", "")).upper() == "VERIFY" and verify_question:
+                conversation_state = normalize_state(verification.get("updated_state", conversation_state))
+                return ChatResponse(
+                    response_text=verify_question,
+                    products=[],
+                    intent_detected="clarification",
+                    followup_questions=[verify_question],
+                    answer_options=list(verification.get("answer_options", [])),
+                    evidence=list(verification.get("evidence", [])),
+                    agent_trace=read_agent_trace(conversation_state),
+                    conversation_state=conversation_state,
+                    debug_info={
+                        "router_score": "hidden",
+                        "segment": conversation_state.get("segment", ""),
+                        "agent_post_action": "VERIFY",
+                        "verify_reason": verification.get("reason", ""),
+                        "verify_metrics": verification.get("metrics", {}),
+                        "evidence_preview": verification.get("evidence", []),
+                    },
+                )
+            conversation_state = normalize_state(verification.get("updated_state", conversation_state))
             
             if not products:
                 response_text = explainer.chat(history_dicts, context_data=f"{lang_instruction}\nSYSTEM: Search for '{retrieval_query}' returned zero results.")
                 if not response_text.strip():
                     response_text = "I am sorry, but I could not find any chocolates that match your search criteria. Would you like to try a different search?"
             else:
-                if _low_retrieval_confidence(result):
-                    retry_decision = agent_step(
-                        user_input,
-                        conversation_state,
-                        max(81, len(result.get("candidates", []))),
-                        total_catalog_count=len(chocolates),
-                    )
-                    retry_question = str(retry_decision.get("question", "")).strip()
-                    retry_options = [
-                        str(option).strip()
-                        for option in retry_decision.get("answer_options", [])
-                        if str(option).strip()
-                    ]
-                    if retry_decision.get("action") in {"ASK", "FILTER"} and retry_question:
-                        conversation_state = normalize_state(retry_decision.get("updated_state", conversation_state))
-                        return ChatResponse(
-                            response_text=retry_question,
-                            products=[],
-                            intent_detected="clarification",
-                            followup_questions=[retry_question],
-                            answer_options=retry_options,
-                            conversation_state=conversation_state,
-                            debug_info={
-                                "router_score": "hidden",
-                                "segment": conversation_state.get("segment", ""),
-                                "confidence_retry": True,
-                                "max_similarity": result.get("max_similarity", 0.0),
-                                "similarity_variance": result.get("similarity_variance", 0.0),
-                            },
-                        )
-
                 list_items = []
                 for i, p in enumerate(products, 1):
                     item_str = f"- ITEM_ID: {i}\n"
@@ -693,11 +679,17 @@ async def chat_endpoint(request: ChatRequest):
             intent_detected=intent,
             followup_questions=[],
             answer_options=final_answer_options,
+            evidence=list(latest_verification.get("evidence", [])),
+            agent_trace=read_agent_trace(conversation_state),
             conversation_state=conversation_state,
             debug_info={
                 "router_score": "hidden",
                 "segment": conversation_state.get("segment", ""),
                 "agent_action": locals().get("agent_action"),
+                "agent_post_action": latest_verification.get("action", "N/A"),
+                "verify_reason": latest_verification.get("reason", ""),
+                "verify_metrics": latest_verification.get("metrics", {}),
+                "evidence_preview": latest_verification.get("evidence", []),
                 "candidate_count": locals().get("candidate_count"),
                 "probe_query": locals().get("probe_query"),
             },
@@ -712,6 +704,8 @@ async def chat_endpoint(request: ChatRequest):
             intent_detected="error",
             followup_questions=[],
             answer_options=[],
+            evidence=[],
+            agent_trace=read_agent_trace(locals().get("conversation_state", normalize_state({}))),
             conversation_state=locals().get("conversation_state", normalize_state({})),
             debug_info={"error": str(e)}
         )

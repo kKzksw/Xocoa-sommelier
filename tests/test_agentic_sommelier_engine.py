@@ -10,26 +10,46 @@ from orchestration.agentic_sommelier_engine import (
 
 def test_segment_is_mandatory_first_step():
     state = normalize_state({})
-    out = agent_step("I want dark chocolate", state, candidate_count=200)
+    out = agent_step("I want dark chocolate", state, candidate_count=200, total_catalog_count=2000)
     assert out["action"] == "ASK"
-    assert "When choosing chocolate" in out["question"]
-    assert out["answer_options"] == ["A", "B", "C"]
+    assert "When choosing chocolate" not in out["question"]
+    assert out["updated_state"]["segment"] == "Impulsive-Involved"
+
+
+def test_clickbox_mode_still_can_prompt_segment():
+    import os
+
+    os.environ["SEGMENT_MODE"] = "clickbox"
+    try:
+        state = normalize_state({})
+        out = agent_step("I want chocolate", state, candidate_count=200, total_catalog_count=2000)
+        assert out["action"] == "ASK"
+        assert "When choosing chocolate" in out["question"]
+        assert out["answer_options"] == ["A", "B", "C"]
+    finally:
+        os.environ.pop("SEGMENT_MODE", None)
 
 
 def test_segment_prompt_does_not_loop_forever_on_invalid_reply():
+    import os
+
+    os.environ["SEGMENT_MODE"] = "clickbox"
     state = normalize_state(
         {
             "_asked_fields": "segment",
             "_last_asked_field": "segment",
         }
     )
-    out = agent_step("idk", state, candidate_count=500, total_catalog_count=2000)
-    assert out["updated_state"]["segment"] in {
-        "Impulsive-Involved",
-        "Rational Health-Conscious",
-        "Uninvolved",
-    }
-    assert "when choosing chocolate" not in out["question"].lower()
+    try:
+        out = agent_step("idk", state, candidate_count=500, total_catalog_count=2000)
+        assert out["updated_state"]["segment"] in {
+            "Impulsive-Involved",
+            "Rational Health-Conscious",
+            "Uninvolved",
+        }
+        assert "when choosing chocolate" not in out["question"].lower()
+    finally:
+        os.environ.pop("SEGMENT_MODE", None)
 
 
 def test_country_scope_is_asked_before_segment_when_country_is_explicit():
@@ -72,7 +92,7 @@ def test_country_scope_loop_is_prevented_after_unparsed_reply():
     out = agent_step("the first interpretation", state, candidate_count=300)
     assert out["action"] == "ASK"
     assert "which one do you mean" not in out["question"].lower()
-    assert "when choosing chocolate" in out["question"].lower()
+    assert out["updated_state"]["segment"] == "Impulsive-Involved"
     assert out["updated_state"]["origin_scope"] == "maker_country"
 
 
@@ -98,7 +118,7 @@ def test_required_collected_still_asks_one_optional_on_first_turn():
     out = agent_step("I prefer dark", state, candidate_count=999)
     assert out["action"] == "ASK"
     assert out["updated_state"]["_clarification_turns"] == "1"
-    assert out["updated_state"]["_last_asked_field"] in {"flavor_direction", "intensity", "context"}
+    assert out["updated_state"]["_last_asked_field"] in {"flavor_direction", "intensity", "context", "broad_narrowing"}
 
 
 def test_after_one_optional_turn_scope_still_large_keeps_asking():
@@ -114,6 +134,33 @@ def test_after_one_optional_turn_scope_still_large_keeps_asking():
     out = agent_step("nutty", state, candidate_count=500)
     assert out["action"] == "ASK"
     assert out["updated_state"]["_clarification_turns"] == "2"
+
+
+def test_free_text_mode_uses_broad_narrowing_prompt_for_large_scope():
+    state = normalize_state(
+        {
+            "segment": "Impulsive-Involved",
+            "chocolate_type": "dark",
+        }
+    )
+    out = agent_step("dark chocolate", state, candidate_count=700, total_catalog_count=2000)
+    assert out["action"] == "ASK"
+    assert "narrow quickly" in out["question"].lower()
+    assert out["updated_state"]["_last_asked_field"] == "broad_narrowing"
+
+
+def test_recommend_keyword_can_trigger_retrieval_after_clarification_started():
+    state = normalize_state(
+        {
+            "segment": "Impulsive-Involved",
+            "chocolate_type": "dark",
+            "_clarification_turns": "1",
+            "_asked_fields": "broad_narrowing",
+            "_last_asked_field": "broad_narrowing",
+        }
+    )
+    out = agent_step("recommend", state, candidate_count=500, total_catalog_count=2000)
+    assert out["action"] == "RETRIEVE"
 
 
 def test_retrieve_when_optional_fields_are_exhausted():

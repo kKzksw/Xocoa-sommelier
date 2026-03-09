@@ -80,6 +80,8 @@ exports.handler = async (event, context) => {
       debug_intent: backendData.intent_detected,
       followup_questions: backendData.followup_questions || [],
       answer_options: backendData.answer_options || [],
+      evidence: backendData.evidence || [],
+      agent_trace: backendData.agent_trace || [],
       conversation_state: backendData.conversation_state || state
     };
 
